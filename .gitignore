@@ -194,3 +194,6 @@ cython_debug/
 .cursorindexingignore
 
 commands.txt
+/vm/mydisk.qcow2
+ssh_config.env
+/vm/data.txt
