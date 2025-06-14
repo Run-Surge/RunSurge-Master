@@ -18,7 +18,8 @@ class VMTaskExecutor:
                  cpus: int = 2,
                  vm_startup_timeout: int = 90,
                  task_timeout: int = 120,
-                 remote_temp_dir: str = "",
+                 shared_folder_host: str = "",
+                 shared_folder_guest: str = "/mnt/shared",
                  log_level: str = "INFO"):
         """
         Initialize the VM Task Executor.
@@ -32,7 +33,8 @@ class VMTaskExecutor:
             cpus: Number of CPU cores for VM
             vm_startup_timeout: Timeout for VM startup in seconds
             task_timeout: Timeout for task execution in seconds
-            remote_temp_dir: Temporary directory on VM for file transfers
+            shared_folder_host: Local directory path to share with VM
+            shared_folder_guest: Mount point in VM for shared folder
             log_level: Logging level
         """
         self.disk_image = disk_image
@@ -43,14 +45,13 @@ class VMTaskExecutor:
         self.cpus = cpus
         self.vm_startup_timeout = vm_startup_timeout
         self.task_timeout = task_timeout
-        self.remote_temp_dir = remote_temp_dir
+        self.shared_folder_host = shared_folder_host
+        self.shared_folder_guest = shared_folder_guest
             
         self.vm_process: Optional[subprocess.Popen] = None
         self.vm_running = False
         
         self.ssh_client: Optional[paramiko.SSHClient] = None
-        
-        # Configure logging with timestamps
         logging.basicConfig(
             level=getattr(logging, log_level.upper()),
             format='%(asctime)s - %(levelname)s - %(message)s',
@@ -87,8 +88,10 @@ class VMTaskExecutor:
                                 self.ssh_username = value
                             elif key == "SSH_PASSWORD":
                                 self.ssh_password = value
-                            elif key == "REMOTE_TEMP_DIR":
-                                self.remote_temp_dir = value
+                            elif key == "SHARED_FOLDER_HOST":
+                                self.shared_folder_host = value
+                            elif key == "SHARED_FOLDER_GUEST":
+                                self.shared_folder_guest = value
                             elif key == "TASK_TIMEOUT":
                                 self.task_timeout = int(value)
                             elif key == "VM_STARTUP_TIMEOUT":
@@ -97,13 +100,50 @@ class VMTaskExecutor:
         except Exception as e:
             self.logger.warning(f"Failed to load config from files: {e}")
     
-    def launch_vm(self) -> bool:
+    def _set_secure_shared_folder_permissions(self):
         """
-        Launch the QEMU virtual machine with specified configurations.
+        Set secure permissions on shared folder:
+        - Directory: 1755 (sticky bit prevents deletion by others)
+        - Files: 644 (read/write for owner, read for others)
+        - Only file owner (host user) can delete files
+        """
+        try:
+            if not self.shared_folder_host or not os.path.exists(self.shared_folder_host):
+                return
             
-        Returns:
-            bool: True if VM launched successfully, False otherwise
-        """
+            # Set directory permissions: 1755 (sticky bit + 755)
+            # Sticky bit (1000) prevents deletion by non-owners
+            # 755 allows read/write/execute for owner, read/execute for others
+            os.chmod(self.shared_folder_host, 0o1755)
+            self.logger.info(f"Set directory permissions to 1755 (sticky bit): {self.shared_folder_host}")
+            
+            # Get current user info for ownership
+            import pwd
+            current_uid = os.getuid()
+            current_gid = os.getgid()
+            
+            # Set directory ownership to current user
+            os.chown(self.shared_folder_host, current_uid, current_gid)
+            self.logger.info(f"Set directory ownership to UID:{current_uid} GID:{current_gid}")
+            
+            # Set file permissions and ownership
+            for root, dirs, files in os.walk(self.shared_folder_host):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    # Set file permissions: 644 (owner can read/write, others read-only)
+                    os.chmod(file_path, 0o644)
+                    # Set file ownership to current user
+                    os.chown(file_path, current_uid, current_gid)
+                    
+            self.logger.info("Set file permissions to 644 and ownership to current user")
+            self.logger.info("Files can only be deleted by the owner (host user)")
+            
+        except Exception as e:
+            self.logger.warning(f"Failed to set secure shared folder permissions: {e}") 
+            
+    
+    def launch_vm(self) -> bool:
+
         if self.vm_running:
             self.logger.warning("VM is already running")
             return True
@@ -122,8 +162,18 @@ class VMTaskExecutor:
                 "-net", "nic",
                 "-hda", self.disk_image,
                 "-display", "none",
-                "-daemonize"
+                "-nographic"
             ]
+            if self.shared_folder_host and os.path.exists(self.shared_folder_host):
+               # self._set_secure_shared_folder_permissions()
+                
+                qemu_cmd.extend([
+                    "-virtfs", f"local,path={self.shared_folder_host},mount_tag=hostshare,security_model=none,id=hostshare"
+                ])
+                self.logger.info(f"Shared folder configured: {self.shared_folder_host} -> {self.shared_folder_guest}")
+            elif self.shared_folder_host:
+                self.logger.warning(f"Shared folder path does not exist: {self.shared_folder_host}")
+                self.shared_folder_host = ""
             
             self.vm_process = subprocess.Popen(
                 qemu_cmd,
@@ -135,6 +185,9 @@ class VMTaskExecutor:
             self.logger.info("VM process started, waiting for SSH connection...")
             if self._wait_for_ssh_connection():
                 self.vm_running = True
+                if self.shared_folder_host:
+                    self._setup_shared_folder()
+                
                 elapsed_time = time.time() - start_time
                 self.logger.info(f"VM launched successfully in {elapsed_time:.2f} seconds")
                 return True
@@ -190,6 +243,36 @@ class VMTaskExecutor:
             self.logger.debug(f"SSH connection attempt failed: {e}")
             return False
     
+    def _setup_shared_folder(self) -> bool:
+        try:
+            self.logger.info("Setting up shared folder in VM...")
+            mkdir_cmd = f"mkdir -p {self.shared_folder_guest}"
+            output, error = self.execute_command(mkdir_cmd)
+            if error:
+                self.logger.warning(f"mkdir warning: {error}")
+            check_mount_cmd = f"mount | grep {self.shared_folder_guest}"
+            output, error = self.execute_command(check_mount_cmd)
+            if output and self.shared_folder_guest in output:
+                self.logger.info("Shared folder already mounted")
+                return True
+            mount_cmd = f"mount -t 9p -o trans=virtio,version=9p2000.L hostshare {self.shared_folder_guest}"
+            output, error = self.execute_command(mount_cmd)
+            if error and "already mounted" not in error.lower():
+                self.logger.error(f"Failed to mount shared folder: {error}")
+                return False
+            verify_cmd = f"ls -la {self.shared_folder_guest}"
+            output, error = self.execute_command(verify_cmd)
+            if error:
+                self.logger.error(f"Failed to verify shared folder mount: {error}")
+                return False
+            
+            self.logger.info(f"Shared folder mounted successfully at {self.shared_folder_guest}")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Failed to setup shared folder: {e}")
+            return False
+    
     def stop_vm(self) -> bool:
         try:
             if self.ssh_client:
@@ -228,7 +311,10 @@ class VMTaskExecutor:
             "ssh_port": self.ssh_port,
             "memory": self.memory,
             "cpus": self.cpus,
-            "disk_image": self.disk_image
+            "disk_image": self.disk_image,
+            "shared_folder_host": self.shared_folder_host,
+            "shared_folder_guest": self.shared_folder_guest,
+            "shared_folder_mounted": False
         }
         
         if self.vm_process:
@@ -238,6 +324,15 @@ class VMTaskExecutor:
             try:
                 self.ssh_client.exec_command("echo test", timeout=5)
                 status["ssh_connected"] = True
+                
+                if self.shared_folder_host and self.shared_folder_guest:
+                    try:
+                        stdin, stdout, stderr = self.ssh_client.exec_command(f"mount | grep {self.shared_folder_guest}", timeout=5)
+                        mount_output = stdout.read().decode('utf-8', errors='ignore')
+                        status["shared_folder_mounted"] = bool(mount_output.strip())
+                    except Exception:
+                        status["shared_folder_mounted"] = False
+                        
             except Exception:
                 status["ssh_connected"] = False
         
@@ -271,66 +366,16 @@ class VMTaskExecutor:
             self.logger.error(f"Failed to execute command '{command}': {e}")
             return None, str(e)
     
-    def transfer_file_to_vm(self, local_path: str, remote_path: Optional[str] = None) -> bool:
-        """
-        Returns:
-            bool: True if transfer successful, False otherwise
-        """
-        if not self.vm_running or not self.ssh_client:
-            self.logger.error("VM is not running or SSH not connected")
-            return False
-        
-        if not os.path.exists(local_path):
-            self.logger.error(f"Local file does not exist: {local_path}")
-            return False
-        
-        try:
-            print("Manga",self.remote_temp_dir)
-            if remote_path is None:
-                filename = os.path.basename(local_path)
-                remote_path = os.path.join(self.remote_temp_dir, filename)
-            
-            sftp = self.ssh_client.open_sftp()
-            sftp.put(local_path, remote_path)
-            sftp.close()
-            
-            self.logger.info(f"File transferred successfully: {local_path} -> {remote_path}")
-            return True
-            
-        except Exception as e:
-            self.logger.error(f"Failed to transfer file: {e}")
-            return False
+
     
-    def transfer_file_from_vm(self, remote_path: str, local_path: str) -> bool:
-        """            
-        Returns:
-            bool: True if transfer successful, False otherwise
-        """
-        if not self.vm_running or not self.ssh_client:
-            self.logger.error("VM is not running or SSH not connected")
-            return False
-        
-        try:
-            sftp = self.ssh_client.open_sftp()
-            sftp.get(remote_path, local_path)
-            sftp.close()
-            
-            self.logger.info(f"File transferred successfully: {remote_path} -> {local_path}")
-            return True
-            
-        except Exception as e:
-            self.logger.error(f"Failed to transfer file from VM: {e}")
-            return False
-    
-    def execute_script(self, script_path: str, script_args: Optional[str] = None, 
-                      transfer_script: bool = True) -> Tuple[Optional[str], Optional[str]]:
+    def execute_script(self, script_path: str, script_args: Optional[str] = None) -> Tuple[Optional[str], Optional[str]]:
         """
         Execute a Python script on the virtual machine using python3.
+        Script must be accessible from within the VM (e.g., in shared folder).
         
         Args:
-            script_path: Path to the Python script (local if transfer_script=True, remote otherwise)
+            script_path: Path to the Python script (VM path, e.g., /mnt/shared/script.py)
             script_args: Arguments to pass to the script
-            transfer_script: Whether to transfer the script to VM first
             
         Returns:
             tuple: (stdout, stderr) or (None, error_message)
@@ -339,16 +384,7 @@ class VMTaskExecutor:
             start_time = time.time()
             script_name = os.path.basename(script_path)
             
-            if transfer_script:
-                self.logger.info(f"Transferring script: {script_name}")
-                if not self.transfer_file_to_vm(script_path):
-                    return None, "Failed to transfer script to VM"
-                
-                remote_script_path = os.path.join(self.remote_temp_dir, script_name)
-            else:
-                remote_script_path = script_path
-            
-            command = f"python3 {remote_script_path}"
+            command = f"python3 {script_path}"
             if script_args:
                 command += f" {script_args}"
             
@@ -368,6 +404,46 @@ class VMTaskExecutor:
             self.logger.error(f"Failed to execute script after {elapsed_time:.2f} seconds: {e}")
             return None, str(e)
     
+    def get_shared_folder_path(self, filename: str = "") -> str:
+        """
+        Get the full path to a file in the shared folder (VM side).
+        
+        Args:
+            filename: Optional filename to append to the shared folder path
+            
+        Returns:
+            str: Full path in the VM's shared folder
+        """
+        if filename:
+            return os.path.join(self.shared_folder_guest, filename).replace('\\', '/')
+        return self.shared_folder_guest
+    
+    def execute_script_from_shared(self, script_filename: str, input_filename: str = "data.txt", output_filename: str = "result.txt") -> Tuple[Optional[str], Optional[str]]:
+        """
+        Execute a Python script from the shared folder with shared folder file paths as arguments.
+        
+        Args:
+            script_filename: Name of the Python script in the shared folder
+            input_filename: Name of input file in shared folder
+            output_filename: Name of output file in shared folder
+            
+        Returns:
+            tuple: (stdout, stderr) or (None, error_message)
+        """
+        if not self.shared_folder_host:
+            return None, "No shared folder configured"
+        
+        input_path = self.get_shared_folder_path(input_filename)
+        output_path = self.get_shared_folder_path(output_filename)        
+        script_path = self.get_shared_folder_path(script_filename)
+        script_args = f'"{input_path}" "{output_path}"'
+        check_cmd = f"test -f {script_path}"
+        _, error = self.execute_command(check_cmd)
+        if error:
+            return None, f"Script not found in shared folder: {script_filename}"
+        
+        return self.execute_script(script_path, script_args)
+    
     def __enter__(self):
         """Context manager entry."""
         self._load_config_from_env()
@@ -379,54 +455,53 @@ class VMTaskExecutor:
 
 
 if __name__ == "__main__":
-    vm_executor = VMTaskExecutor()
+    ## Testing Example
+    ## shared_dir is one for the host, put the files on it task.py, data.txt
+    ## run the script (vm.py)
+    ## see the result in the result.txt
+    shared_dir = "./shared"
+    
+    vm_executor = VMTaskExecutor(shared_folder_host=shared_dir)
     if vm_executor.launch_vm():
-            status = vm_executor.get_vm_status()
-            vm_executor.logger.info(f"VM Status - Running: {status['vm_running']}, SSH Connected: {status['ssh_connected']}")
-            
-            # Check if required files exist
-            required_files = ["data.txt", "task.py"]
-            missing_files = [f for f in required_files if not os.path.exists(f)]
-            
-            if missing_files:
-                vm_executor.logger.error(f"Missing required files: {missing_files}")
-            else:
-                # Transfer data file first
-                vm_executor.logger.info("Transferring data file...")
-                if vm_executor.transfer_file_to_vm("data.txt"):
-                    vm_executor.logger.info("Data file transferred successfully")
-                    
-                    # Execute the task script (which will also be transferred)
-                    script_output, script_error = vm_executor.execute_script("task.py")
-                    if script_output:
-                        print("Script Console Output:")
-                        print("Here 111111111111")
-                        print(script_output)
-                    if script_error:
-                        vm_executor.logger.error(f"Script Error: {script_error}")
-                    
-                    # Transfer result file back from VM
-                    vm_executor.logger.info("Transferring result file back from VM...")
-                    remote_result_path = "result.txt"
-                    local_result_path = "result_from_vm.txt"
-                    
-                    if vm_executor.transfer_file_from_vm(remote_result_path, local_result_path):
-                        vm_executor.logger.info(f"Result file transferred successfully to: {local_result_path}")
-                        
-                        # Display the result file contents
-                        try:
-                            with open(local_result_path, 'r') as f:
-                                result_content = f.read()
-                            print("\n" + "="*50)
-                            print("RESULT FILE CONTENTS:")
-                            print("="*50)
-                            print(result_content)
-                            print("="*50)
-                        except Exception as e:
-                            vm_executor.logger.error(f"Failed to read result file: {e}")
-                    else:
-                        vm_executor.logger.error("Failed to transfer result file from VM")
-                        
+        status = vm_executor.get_vm_status()
+        vm_executor.logger.info(f"VM Status - Running: {status['vm_running']}, SSH Connected: {status['ssh_connected']}")
+        
+        if status.get('shared_folder_mounted'):
+            vm_executor.logger.info(f"Shared folder mounted: {status['shared_folder_host']} -> {status['shared_folder_guest']}")
+            script_output, script_error = vm_executor.execute_script_from_shared("task.py", "data.txt", "result.txt")
+            if script_output:
+                print("Script Console Output:")
+                print("="*50)
+                print(script_output)
+                print("="*50)
+            elif script_error:
+                if "not found" in script_error:
+                    vm_executor.logger.warning("No task.py found in shared folder. Please place your script in the shared directory.")
+                    vm_executor.logger.info(f"Shared folder location: {shared_dir}")
                 else:
-                    vm_executor.logger.error("Failed to transfer data file")
+                    vm_executor.logger.error(f"Script Error: {script_error}")
+            
+            result_file_path = os.path.join(shared_dir, "result.txt")
+            if os.path.exists(result_file_path):
+                vm_executor.logger.info("Result file found in shared folder")
+                try:
+                    with open(result_file_path, 'r') as f:
+                        result_content = f.read()
+                    print("\n" + "="*50)
+                    print("RESULT FILE CONTENTS:")
+                    print("="*50)
+                    print(result_content)
+                    print("="*50)
+                except Exception as e:
+                    vm_executor.logger.error(f"Failed to read result file: {e}")
+            else:
+                vm_executor.logger.info("No result file found in shared folder")
+                
+        else:
+            vm_executor.logger.error("Shared folder not mounted. Cannot proceed without shared folder.")
+            vm_executor.logger.info("Please ensure:")
+            vm_executor.logger.info(f"1. Shared folder path exists: {shared_dir}")
+            vm_executor.logger.info("2. VM has proper 9P filesystem support")
+            vm_executor.logger.info("3. VM has necessary mount permissions")
+            
     vm_executor.stop_vm()
