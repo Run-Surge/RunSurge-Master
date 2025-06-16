@@ -1,14 +1,12 @@
 @echo off
 setlocal
 
-:: Parameters with defaults
 set "MEMORY=%~1"
 set "CPUS=%~2"
 set "SSH_PORT=%~3"
 set "DISK_IMAGE=%~4"
 set "QEMU_PATH=%~5"
 
-:: Use defaults if parameters not provided
 if "%DISK_IMAGE%"=="" set "DISK_IMAGE=D:\CMP 4th Year\First Term\GP\RunSurge-Master\vm\mydisk.qcow2"
 if "%MEMORY%"=="" set "MEMORY=2048"
 if "%CPUS%"=="" set "CPUS=2"

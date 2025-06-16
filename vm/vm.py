@@ -9,6 +9,7 @@ import platform
 from typing import Optional, Tuple, Dict, Any
 import socket
 import psutil
+import ctypes
 
 class VMTaskExecutor:    
     def __init__(self, 
@@ -58,10 +59,6 @@ class VMTaskExecutor:
         self.smb_username = smb_username
         self.smb_password = smb_password
         self.smb_share_name = smb_share_name
-        
-        # OS detection for cross-platform compatibility
-        self.is_windows = platform.system() == "Windows"
-            
         self.vm_process: Optional[subprocess.Popen] = None
         self.vm_running = False
         
@@ -79,32 +76,16 @@ class VMTaskExecutor:
         logging.getLogger("paramiko.transport.sftp").setLevel(logging.WARNING)
     
     def _get_qemu_executable(self) -> str:
-        """Get the appropriate QEMU executable for the current OS."""
-        import shutil
-        
-        if self.is_windows:
-            # Common QEMU installation paths on Windows
             possible_paths = [
+                # should add possible paths here 
+                # users can find it on different places
                 "C:\\Program Files\\qemu\\qemu-system-x86_64.exe",
             ]
             
-            # Check each path in order
             for path in possible_paths:
                 if os.path.exists(path) or (path == "qemu-system-x86_64.exe" and shutil.which(path)):
                     self.logger.info(f"Found QEMU at: {path}")
                     return path
-        else:
-            # Linux/Unix systems
-            if shutil.which("qemu-system-x86_64"):
-                return "qemu-system-x86_64"
-            else:
-                raise FileNotFoundError(
-                    "QEMU not found. Please install QEMU using your package manager:\n"
-                    "  - Ubuntu/Debian: sudo apt install qemu-system-x86\n"
-                    "  - CentOS/RHEL: sudo yum install qemu-kvm\n"
-                    "  - Arch: sudo pacman -S qemu"
-                )
-    
     def _load_config_from_env(self, vm_config_file: str = "vm_config.env", 
                              ssh_config_file: str = "ssh_config.env"):
         """Load configuration from environment files."""
@@ -142,22 +123,15 @@ class VMTaskExecutor:
             self.logger.warning(f"Failed to load config from files: {e}")
     
     def _check_admin_privileges(self) -> bool:
-        """Check if the current process has administrator privileges."""
         try:
-            import ctypes
             return ctypes.windll.shell32.IsUserAnAdmin()
         except Exception as e:
             self.logger.warning(f"Could not check administrator privileges: {e}")
             return False
 
     def _request_admin_privileges(self) -> bool:
-        """Request administrator privileges from the user."""
         try:
-            import ctypes
-            
             self.logger.info("Administrator privileges are required for SMB share setup.")
-            
-            # Prompt user for elevation
             response = input("Do you want to request administrator privileges? (y/n): ").strip().lower()
             if response not in ['y', 'yes']:
                 self.logger.info("Administrator privileges declined by user.")
@@ -200,31 +174,12 @@ class VMTaskExecutor:
             return False
 
     def _setup_smb_with_batch(self) -> bool:
-        """
-        Set up SMB share using smb.bat script.
-        Requests admin privileges before running the batch file.
-        """
         try:
-            if not self.is_windows:
-                self.logger.warning("SMB share setup is only supported on Windows")
-                return False
-                
-            if not self.shared_folder_host or not os.path.exists(self.shared_folder_host):
-                self.logger.error(f"Shared folder path does not exist: {self.shared_folder_host}")
-                return False
-            
-            # Check if we have admin privileges
             if not self._check_admin_privileges():
                 self.logger.warning("Administrator privileges required for SMB share setup!")
                 if not self._request_admin_privileges():
                     self.logger.error("Cannot proceed without administrator privileges.")
-                    self.logger.info("Alternative: Run this script as Administrator")
                     return False
-                # If we reach here, the script should have restarted with admin privileges
-                return False
-
-            
-         
             self.logger.info("Setting up SMB share using smb.bat...")
             smb_script = os.path.join(os.path.dirname(__file__), "smb.bat")
             print(f"SMB Script: {smb_script}")
@@ -235,14 +190,8 @@ class VMTaskExecutor:
             print(f"SMB Password: {self.smb_password}")
             print(f"Shared Folder: {self.shared_folder_host}")
             print(f"SMB Share Name: {self.smb_share_name}")
-            
-            # Run smb.bat without parameters - it will use its defaults
-            cmd = f'"{smb_script}" "{self.smb_username}" "{self.smb_password}" "{self.smb_share_name}" "{self.shared_folder_host}"'
-            
-            print(f"Debug - SMB command: {cmd}")
-            
+            cmd = f'"{smb_script}" "{self.smb_username}" "{self.smb_password}" "{self.smb_share_name}" "{self.shared_folder_host}"'            
             try:
-                # Run the batch file without parameters
                 result = subprocess.run(cmd, shell=True)
                 if result.returncode == 0:
                     self.logger.info("SMB share setup completed successfully")
@@ -265,17 +214,12 @@ class VMTaskExecutor:
         """
         try:
             self.logger.info("Launching VM using startup.bat...")
-            
-            # Prepare command for startup.bat with parameters
             startup_script = os.path.join(os.path.dirname(__file__), "startup.bat")
             if not os.path.exists(startup_script):
                 self.logger.error("startup.bat not found in the current directory")
                 return False
-            
-            # Run startup.bat without parameters - it will use its defaults
             cmd = f'"{startup_script}" "{self.memory}" "{self.cpus}" "{self.ssh_port}" "{self.disk_image}" "{self._get_qemu_executable()}"'          
             try:
-                # Run the batch file in background with visible output
                 self.vm_process = subprocess.Popen(
                     cmd,
                     shell=True,
@@ -294,63 +238,35 @@ class VMTaskExecutor:
             
     
     def launch_vm(self) -> bool:
-
         if self.vm_running:
             self.logger.warning("VM is already running")
             return True
-        
         try:
             start_time = time.time()
             self.logger.info("Starting VM launch process...")
-            
-            # Setup SMB share on Windows if shared folder is configured
-            if self.shared_folder_host and os.path.exists(self.shared_folder_host):
-                if self.is_windows:
-                    if self._setup_smb_with_batch():
-                        self.logger.info(f"SMB share configured: {self.shared_folder_host} -> {self.shared_folder_guest}")
-                    else:
-                        self.logger.warning("Failed to setup SMB share")
-                        self.shared_folder_host = ""
-                else:
-                    self.logger.warning("SMB sharing is only supported on Windows host")
-                    self.shared_folder_host = ""
-            elif self.shared_folder_host:
+
+            if not self.shared_folder_host:
+                self.logger.warning("No shared folder configured")
+                return False
+            if not os.path.exists(self.shared_folder_host):
                 self.logger.warning(f"Shared folder path does not exist: {self.shared_folder_host}")
-                self.shared_folder_host = ""
+                return False
             
-            # Launch VM using batch file on Windows, or traditional method on Linux
-            if self.is_windows:
-                if not self._launch_vm_with_batch():
-                    self.logger.error("Failed to launch VM using startup.bat")
-                    return False
+            if self._setup_smb_with_batch():
+                self.logger.info(f"SMB share configured: {self.shared_folder_host} -> {self.shared_folder_guest}")
             else:
-                # Traditional QEMU launch for Linux/Unix
-                qemu_cmd = [
-                    self._get_qemu_executable(),
-                    "-m", str(self.memory),
-                    "-smp", str(self.cpus),
-                    "-net", f"user,hostfwd=tcp::{self.ssh_port}-:22",
-                    "-accel", "tcg",
-                    "-cpu", "qemu64",
-                    "-net", "nic",
-                    "-hda", self.disk_image,
-                    "-display", "none",
-                    "-nographic"
-                ]
-                
-                self.vm_process = subprocess.Popen(
-                    qemu_cmd,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    stdin=subprocess.PIPE
-                )
+                self.logger.error("Failed to setup SMB share")
+                return False
+            
+            if not self._launch_vm_with_batch():
+                self.logger.error("Failed to launch VM using startup.bat")
+                return False
             
             self.logger.info("VM process started, waiting for SSH connection...")
             if self._wait_for_ssh_connection():
                 self.vm_running = True
                 if self.shared_folder_host:
                     self._setup_shared_folder()
-                
                 elapsed_time = time.time() - start_time
                 self.logger.info(f"VM launched successfully in {elapsed_time:.2f} seconds")
                 return True
@@ -410,11 +326,11 @@ class VMTaskExecutor:
         try:
             self.logger.info("Setting up shared folder in VM...")
             
-            # Create mount point directory
             mkdir_cmd = f"mkdir -p {self.shared_folder_guest}"
             output, error = self.execute_command(mkdir_cmd)
             if error:
-                self.logger.warning(f"mkdir warning: {error}")            
+                self.logger.error(f"mkdir error: {error}")    
+                return False
             check_mount_cmd = f"mount | grep {self.shared_folder_guest}"
             output, error = self.execute_command(check_mount_cmd)
             if output and self.shared_folder_guest in output:
@@ -464,12 +380,6 @@ class VMTaskExecutor:
             return False
     
     def get_vm_status(self) -> Dict[str, Any]:
-        """
-        Get the current status of the virtual machine.
-        
-        Returns:
-            dict: VM status information
-        """
         status = {
             "vm_running": self.vm_running,
             "vm_process_alive": False,
@@ -505,16 +415,6 @@ class VMTaskExecutor:
         return status
     
     def execute_command(self, command: str, timeout: Optional[int] = None) -> Tuple[Optional[str], Optional[str]]:
-        """
-        Execute a command on the virtual machine via SSH.
-        
-        Args:
-            command: Command to execute
-            timeout: Command timeout in seconds
-            
-        Returns:
-            tuple: (stdout, stderr) or (None, error_message)
-        """
         if not self.vm_running or not self.ssh_client:
             return None, "VM is not running or SSH not connected"
         
@@ -571,15 +471,6 @@ class VMTaskExecutor:
             return None, str(e)
     
     def get_shared_folder_path(self, filename: str = "") -> str:
-        """
-        Get the full path to a file in the shared folder (VM side).
-        
-        Args:
-            filename: Optional filename to append to the shared folder path
-            
-        Returns:
-            str: Full path in the VM's shared folder
-        """
         if filename:
             return os.path.join(self.shared_folder_guest, filename).replace('\\', '/')
         return self.shared_folder_guest
@@ -657,5 +548,4 @@ if __name__ == "__main__":
             vm_executor.logger.info(f"1. Shared folder path exists: {shared_dir}")
             vm_executor.logger.info("2. VM has proper CIFS/SMB support")
             vm_executor.logger.info("3. VM has necessary mount permissions")
-            
     vm_executor.stop_vm()
