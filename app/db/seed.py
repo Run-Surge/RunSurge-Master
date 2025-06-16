@@ -4,7 +4,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from urllib.parse import quote_plus
 from dotenv import load_dotenv
-from db.models.scheme import (
+from app.db.models.scheme import (
     Base, User, Node, NodeHeartbeat, Job, Data, DataLocation,
     Task, TaskDependency, NodeLog, Payment, NodeResources,
     JobStatus, TaskStatus, LogEventType, PaymentStatus
@@ -17,7 +17,6 @@ DB_PASSWORD = os.getenv("DB_PASSWORD", "your_password")
 DB_HOST = os.getenv("DB_HOST", "localhost")
 DB_NAME = os.getenv("DB_NAME", "your_project_db")
 DB_PORT = os.getenv("DB_PORT", "5432")
-
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 # URL encode the password to handle special characters
@@ -35,10 +34,11 @@ def create_sample_data():
             username=f"user{i}",
             email=f"user{i}@example.com",
             password=pwd_context.hash("123456"),  # In real app, these would be properly hashed
+            created_at=datetime.now() - timedelta(days=i)
         ) for i in range(1, 6)
     ]
     session.add_all(users)
-    session.commit()    
+    session.commit()
 
     # Create Nodes
     nodes = [
@@ -47,8 +47,6 @@ def create_sample_data():
             user_id=users[i-1].user_id,  # Each node belongs to a user
             ram=8192 * i,  # 8GB, 16GB, 24GB, 32GB, 40GB
             cpu_cores=i * 2,  # 2, 4, 6, 8, 10 cores
-            ip_address=f"192.168.1.{i}",
-            port=8000 + i
         ) for i in range(1, 6)
     ]
     session.add_all(nodes)
@@ -78,7 +76,7 @@ def create_sample_data():
         for i in range(2):  # 2 jobs per user
             job = Job(
                 user_id=user.user_id,
-                status=JobStatus.completed if i % 2 == 0 else JobStatus.running
+                status=JobStatus.completed if i % 2 == 0 else JobStatus.running,
             )
             jobs.append(job)
     session.add_all(jobs)
@@ -89,7 +87,7 @@ def create_sample_data():
     for job in jobs:
         data = Data(
             job_id=job.job_id,
-            size_bytes=1024 * 1024 * (int(job.job_id.split('-')[0], 16) % 10 + 1)  # Random size between 1MB and 10MB
+            size_bytes=1024 * 1024 * (int(str(job.job_id)[-1]) % 10 + 1),  # Random size between 1MB and 10MB
         )
         data_entries.append(data)
     session.add_all(data_entries)
@@ -154,13 +152,14 @@ def create_sample_data():
                 node_id=node.node_id,
                 amount=10.0 * (task.required_ram / 1024),  # $10 per GB of RAM
                 task_id=task.task_id,
-                status=PaymentStatus.completed if task.status == TaskStatus.completed else PaymentStatus.pending
+                status=PaymentStatus.completed if task.status == TaskStatus.completed else PaymentStatus.pending,
+                created_at=datetime.now() - timedelta(hours=1)
             )
             session.add(payment)
     session.commit()
 
 if __name__ == "__main__":
     # Create all tables
-    # Base.metadata.create_all(engine)
+    Base.metadata.create_all(engine)
     create_sample_data()
 
