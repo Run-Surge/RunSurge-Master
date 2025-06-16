@@ -9,7 +9,7 @@ class TaskRepository(BaseRepository[Task]):
     def __init__(self, session: Session):
         super().__init__(session, Task)
     # not tested due to data_id
-    async def create_task(self, job_id: str, data_id: str, required_ram: int) -> Task:
+    async def create_task(self, job_id: int, data_id: int, required_ram: int) -> Task:
         task = Task(
             job_id=job_id,
             data_id=data_id,

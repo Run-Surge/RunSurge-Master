@@ -23,7 +23,7 @@ class NodeRepository(BaseRepository[Node]):
         await self.create(db_node)
         return db_node
 
-    async def node_name_exists(self, node_name: str, user_id: str) -> bool:
+    async def node_name_exists(self, node_name: str, user_id: int) -> bool:
         statement = select(Node).where(
             and_(Node.node_name == node_name, Node.user_id == user_id)
         )

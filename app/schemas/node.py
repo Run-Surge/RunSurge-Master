@@ -4,7 +4,7 @@ from typing import Optional
 
 class NodeBase(BaseModel):
     node_name: str
-    user_id: str
+    user_id: int
     ram: int
     cpu_cores: int
     ip_address: Optional[str] = None

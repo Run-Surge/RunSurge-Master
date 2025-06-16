@@ -41,7 +41,7 @@ class PaymentStatus(str, Enum):
 class User(Base):
     __tablename__ = "user"
     
-    user_id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(Integer, primary_key=True, autoincrement=True)
     username = Column(String, nullable=False, index=True, unique=True) 
     email = Column(String, nullable=False, index=True, unique=True)
     password = Column(String)
@@ -56,9 +56,9 @@ class User(Base):
 class Node(Base):
     __tablename__ = "node"
     
-    node_id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    node_id = Column(Integer, primary_key=True, autoincrement=True)
     node_name = Column(String)
-    user_id = Column(String, ForeignKey("user.user_id"))
+    user_id = Column(Integer, ForeignKey("user.user_id"))
     ram = Column(Integer)
     cpu_cores = Column(Integer)
     ip_address = Column(String, default=None)
@@ -81,7 +81,7 @@ class Node(Base):
 class NodeHeartbeat(Base):
     __tablename__ = "node_heartbeat"
     
-    node_id = Column(String, ForeignKey("node.node_id"), primary_key=True)
+    node_id = Column(Integer, ForeignKey("node.node_id"), primary_key=True)
     last_ping = Column(DateTime, default=datetime.now)
 
     # Relationships
@@ -90,8 +90,8 @@ class NodeHeartbeat(Base):
 class Job(Base):
     __tablename__ = "job"
     
-    job_id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    user_id = Column(String, ForeignKey("user.user_id"))
+    job_id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("user.user_id"))
     status = Column(SQLEnum(JobStatus), default=JobStatus.pending)
     created_at = Column(DateTime, default=datetime.now)
 
@@ -103,8 +103,8 @@ class Job(Base):
 class Data(Base):
     __tablename__ = "data"
     
-    data_id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    job_id = Column(String, ForeignKey("job.job_id"))
+    data_id = Column(Integer, primary_key=True, autoincrement=True)
+    job_id = Column(Integer, ForeignKey("job.job_id"))
     size_bytes = Column(Integer)
     created_at = Column(DateTime, default=datetime.now)
 
@@ -116,8 +116,8 @@ class Data(Base):
 class DataLocation(Base):
     __tablename__ = "data_location"
     
-    data_id = Column(String, ForeignKey("data.data_id"), primary_key=True)
-    node_id = Column(String, ForeignKey("node.node_id"), primary_key=True)
+    data_id = Column(Integer, ForeignKey("data.data_id"), primary_key=True)
+    node_id = Column(Integer, ForeignKey("node.node_id"), primary_key=True)
 
     # Relationships
     data = relationship("Data", back_populates="locations")
@@ -126,10 +126,10 @@ class DataLocation(Base):
 class Task(Base):
     __tablename__ = "task"
     
-    task_id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    job_id = Column(String, ForeignKey("job.job_id"))
-    node_id = Column(String, ForeignKey("node.node_id"), nullable=True)
-    data_id = Column(String, ForeignKey("data.data_id"))
+    task_id = Column(Integer, primary_key=True, autoincrement=True)
+    job_id = Column(Integer, ForeignKey("job.job_id"))
+    node_id = Column(Integer, ForeignKey("node.node_id"), nullable=True)
+    data_id = Column(Integer, ForeignKey("data.data_id"))
     status = Column(SQLEnum(TaskStatus), default=TaskStatus.pending)
     required_ram = Column(Integer)
     started_at = Column(DateTime, nullable=True)
@@ -153,15 +153,15 @@ class Task(Base):
 class TaskDependency(Base):
     __tablename__ = "task_dependency"
     
-    task_id = Column(String, ForeignKey("task.task_id"), primary_key=True)
-    depends_on_task_id = Column(String, ForeignKey("task.task_id"), primary_key=True)
+    task_id = Column(Integer, ForeignKey("task.task_id"), primary_key=True)
+    depends_on_task_id = Column(Integer, ForeignKey("task.task_id"), primary_key=True)
 
 class NodeLog(Base):
     __tablename__ = "node_log"
     
     log_id = Column(Integer, primary_key=True, autoincrement=True)
-    node_id = Column(String, ForeignKey("node.node_id"))
-    task_id = Column(String, ForeignKey("task.task_id"), nullable=True)
+    node_id = Column(Integer, ForeignKey("node.node_id"))
+    task_id = Column(Integer, ForeignKey("task.task_id"), nullable=True)
     event_type = Column(SQLEnum(LogEventType))
     timestamp = Column(DateTime, default=datetime.now)
 
@@ -172,10 +172,10 @@ class NodeLog(Base):
 class Payment(Base):
     __tablename__ = "payment"
     
-    payment_id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    node_id = Column(String, ForeignKey("node.node_id"))
+    payment_id = Column(Integer, primary_key=True, autoincrement=True)
+    node_id = Column(Integer, ForeignKey("node.node_id"))
     amount = Column(Float)
-    task_id = Column(String, ForeignKey("task.task_id"), nullable=True)
+    task_id = Column(Integer, ForeignKey("task.task_id"), nullable=True)
     status = Column(SQLEnum(PaymentStatus), default=PaymentStatus.pending)
     created_at = Column(DateTime, default=datetime.now)
 
@@ -186,7 +186,7 @@ class Payment(Base):
 class NodeResources(Base):
     __tablename__ = "node_resources"
     
-    node_id = Column(String, ForeignKey("node.node_id"), primary_key=True)
+    node_id = Column(Integer, ForeignKey("node.node_id"), primary_key=True)
     rem_ram = Column(Integer)
     rem_cpu_cores = Column(Integer)
 

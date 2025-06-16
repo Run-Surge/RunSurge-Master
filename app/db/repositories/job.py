@@ -10,15 +10,15 @@ class JobRepository(BaseRepository[Job]):
     def __init__(self, session: Session):
         super().__init__(session, Job)
 
-    async def create_job(self, user_id: str) -> Job:
+    async def create_job(self, user_id: int) -> Job:
         job = Job(user_id=user_id)
         return await self.create(job)
 
-    async def get_jobs_by_user(self, user_id: str) -> List[Job]:
+    async def get_jobs_by_user(self, user_id: int) -> List[Job]:
         statement = select(Job).where(Job.user_id == user_id)
         return await self.session.execute(statement).scalars().all()
 
-    async def update_job_status(self, job_id: str, status: JobStatus) -> Optional[Job]:
+    async def update_job_status(self, job_id: int, status: JobStatus) -> Optional[Job]:
         job = await self.get_by_id(job_id)
         if job:
             job.status = status
