@@ -4,7 +4,6 @@ from typing import Optional
 
 class NodeBase(BaseModel):
     node_name: str
-    user_id: int
     ram: int
     cpu_cores: int
     ip_address: Optional[str] = None
@@ -13,7 +12,7 @@ class NodeBase(BaseModel):
 class NodeRead(NodeBase):
     node_id: int
     created_at: datetime
-
+    user_id: int
     model_config = ConfigDict(from_attributes=True)
 
 class NodeCreate(NodeBase):

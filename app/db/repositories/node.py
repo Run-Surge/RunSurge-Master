@@ -12,10 +12,10 @@ class NodeRepository(BaseRepository[Node]):
     def __init__(self, session: AsyncSession):
         super().__init__(session, Node)
 
-    async def create_node(self, node: NodeCreate) -> Node:
+    async def create_node(self, node: NodeCreate, user_id: int) -> Node:
         db_node = Node(
             node_name=node.node_name,
-            user_id=node.user_id,
+            user_id=user_id,
             ram=node.ram,
             cpu_cores=node.cpu_cores,
             ip_address=node.ip_address,
