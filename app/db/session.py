@@ -1,7 +1,9 @@
 import os
-from sqlmodel import Session, SQLModel, create_engine
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker, Session
 from dotenv import load_dotenv
 from urllib.parse import quote_plus
+
 load_dotenv()
 
 DB_USER = os.getenv("DB_USER", "your_user")
@@ -15,13 +17,17 @@ encoded_password = quote_plus(DB_PASSWORD)
 DATABASE_URL = f"postgresql+psycopg2://{DB_USER}:{encoded_password}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 
 engine = create_engine(DATABASE_URL, echo=True)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 def init_db():
-    import db.models.scheme
+    from app.db.models.scheme import Base
     print("Database URL:", DATABASE_URL)
+    Base.metadata.create_all(engine)
     print("Database initialized successfully.")
-    SQLModel.metadata.create_all(engine)
 
-def get_session():
-    with Session(engine) as session:
+def get_db():
+    session = SessionLocal()
+    try:
         yield session
+    finally:
+        session.close()

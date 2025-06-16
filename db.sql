@@ -27,7 +27,7 @@ CREATE TABLE node (
 CREATE TABLE node_heartbeat (
     node_id    UUID PRIMARY KEY,
     last_ping  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (node_id) REFERENCES nodes(node_id) ON DELETE CASCADE
+    FOREIGN KEY (node_id) REFERENCES node(node_id) ON DELETE CASCADE
 );
 
 CREATE TABLE jobs (
@@ -53,7 +53,7 @@ CREATE TABLE data_location (
     node_id UUID NOT NULL,
     PRIMARY KEY (data_id, node_id),
     FOREIGN KEY (data_id) REFERENCES data(data_id) ON DELETE CASCADE,
-    FOREIGN KEY (node_id) REFERENCES nodes(node_id) ON DELETE CASCADE
+    FOREIGN KEY (node_id) REFERENCES node(node_id) ON DELETE CASCADE
 );
 
 CREATE TABLE tasks (
@@ -67,7 +67,7 @@ CREATE TABLE tasks (
     completed_at  TIMESTAMP NULL,
     retry_count   INT DEFAULT 0,
     FOREIGN KEY (job_id) REFERENCES jobs(job_id) ON DELETE CASCADE,
-    FOREIGN KEY (node_id) REFERENCES nodes(node_id) ON DELETE SET NULL,
+    FOREIGN KEY (node_id) REFERENCES node(node_id) ON DELETE SET NULL,
     FOREIGN KEY (data_id) REFERENCES data(data_id) ON DELETE CASCADE
 );
 
@@ -85,7 +85,7 @@ CREATE TABLE node_logs (
     task_id    UUID DEFAULT NULL,
     event_type log_event_type NOT NULL,
     timestamp  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (node_id) REFERENCES nodes(node_id) ON DELETE CASCADE,
+    FOREIGN KEY (node_id) REFERENCES node(node_id) ON DELETE CASCADE,
     FOREIGN KEY (task_id) REFERENCES tasks(task_id) ON DELETE SET NULL
 );
 
@@ -96,7 +96,7 @@ CREATE TABLE payments (
     task_id    UUID DEFAULT NULL,
     status     payment_status DEFAULT 'pending',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (node_id) REFERENCES nodes(node_id) ON DELETE CASCADE,
+    FOREIGN KEY (node_id) REFERENCES node(node_id) ON DELETE CASCADE,
     FOREIGN KEY (task_id) REFERENCES tasks(task_id) ON DELETE SET NULL
 );
 
@@ -104,5 +104,5 @@ CREATE TABLE node_resources (
     node_id UUID PRIMARY KEY,
     rem_ram     INT NOT NULL,
     rem_cpu_cores INT NOT NULL,
-    FOREIGN KEY (node_id) REFERENCES nodes(node_id) ON DELETE CASCADE
+    FOREIGN KEY (node_id) REFERENCES node(node_id) ON DELETE CASCADE
 );

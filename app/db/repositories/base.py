@@ -1,26 +1,26 @@
-from sqlmodel import Session, select
+from sqlalchemy.orm import Session
+from sqlalchemy import select
 from typing import Optional, List, TypeVar, Generic, Type
-import uuid
 
 T=TypeVar('T')
 
 class BaseRepository(Generic[T]):
-    def __init__ (self,session: Session, model: Type[T]):
+    def __init__(self, session: Session, model: Type[T]):
         self.session = session
         self.model = model
 
-    def create(self, obj: T) -> T:
+    async def create(self, obj: T) -> T:
         self.session.add(obj)
         self.session.commit()
         self.session.refresh(obj)
         return obj
 
-    def get_by_id(self, id: uuid.UUID) -> Optional[T]:
+    async def get_by_id(self, id: str) -> Optional[T]:
         return self.session.get(self.model, id)
 
-    def delete(self, obj: T) -> None:
+    async def delete(self, obj: T) -> None:
         self.session.delete(obj)
         self.session.commit()
 
-    def get_all(self) -> List[T]:
-        return self.session.exec(select(self.model)).all()
+    async def get_all(self) -> List[T]:
+        return self.session.execute(select(self.model)).scalars().all()
