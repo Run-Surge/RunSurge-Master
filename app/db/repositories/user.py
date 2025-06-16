@@ -22,16 +22,15 @@ class UserRepository(BaseRepository[User]):
 
     async def create_user(self, user: UserCreate) -> User:
         hashed_password = bcrypt_sha256.hash(user.password)
-        user = User(username=user.username, email=user.email, password=hashed_password)
-        await self.create(user)
-        return user
+        db_user = User(username=user.username, email=user.email, password=hashed_password)
+        return await self.create(db_user)
 
     async def username_or_email_exists(self, username: str, email: str) -> bool:
         statement = select(User).where(
             or_(User.username == username, User.email == email)
         )
-        result = self.session.execute(statement)
-        return result.scalar_one_or_none() is not None
+        result = await self.session.execute(statement)
+        return result.first() is not None
     
 
 

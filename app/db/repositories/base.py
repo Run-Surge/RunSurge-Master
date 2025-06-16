@@ -11,16 +11,17 @@ class BaseRepository(Generic[T]):
 
     async def create(self, obj: T) -> T:
         self.session.add(obj)
-        self.session.commit()
-        self.session.refresh(obj)
+        await self.session.commit()
+        await self.session.refresh(obj)
         return obj
 
-    async def get_by_id(self, id: str) -> Optional[T]:
-        return self.session.get(self.model, id)
+    async def get_by_id(self, id: int) -> Optional[T]:
+        return await self.session.get(self.model, id)
 
     async def delete(self, obj: T) -> None:
         self.session.delete(obj)
-        self.session.commit()
+        await self.session.commit()
 
     async def get_all(self) -> List[T]:
-        return self.session.execute(select(self.model)).scalars().all()
+        result = await self.session.execute(select(self.model))
+        return result.scalars().all()

@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from datetime import datetime
 from typing import Optional
 
@@ -11,7 +11,10 @@ class NodeBase(BaseModel):
     port: Optional[int] = None
 
 class NodeRead(NodeBase):
+    node_id: int
     created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
 
 class NodeCreate(NodeBase):
     pass

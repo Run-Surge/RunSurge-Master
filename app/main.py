@@ -7,7 +7,7 @@ from app.api import user, node, job
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    init_db()
+    await init_db()
     yield
 
 app = FastAPI(lifespan=lifespan)

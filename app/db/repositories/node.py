@@ -20,22 +20,21 @@ class NodeRepository(BaseRepository[Node]):
             ip_address=node.ip_address,
             port=node.port
         )
-        await self.create(db_node)
-        return db_node
+        return await self.create(db_node)
 
     async def node_name_exists(self, node_name: str, user_id: int) -> bool:
         statement = select(Node).where(
             and_(Node.node_name == node_name, Node.user_id == user_id)
         )
-        result = self.session.execute(statement)
-        return result.scalar_one_or_none() is not None
+        result = await self.session.execute(statement)
+        return result.first() is not None
 
     async def get_by_ip_and_port(self, ip_address: str, port: int) -> Optional[Node]:
         statement = select(Node).where(
             and_(Node.ip_address == ip_address, Node.port == port)
         )
         result = await self.session.execute(statement)
-        return result.scalar_one_or_none()
+        return result.first()
 
     async def get_available_nodes(self, required_ram: int) -> List[Node]:
         statement = select(Node).join(NodeResources).where(
