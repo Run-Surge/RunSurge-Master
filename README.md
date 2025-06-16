@@ -2,6 +2,11 @@
 
 A distributed computing platform that manages and executes tasks across multiple worker nodes.
 
+## Requirments
+
+1. `python 3.11.9`
+2. `postgress`
+
 ## Setup
 
 1. Create a virtual environment:
