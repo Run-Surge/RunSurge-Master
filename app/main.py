@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from contextlib import asynccontextmanager
 from fastapi.middleware.cors import CORSMiddleware
 from app.db.session import init_db
-from app.api import user, node, job
+from app.api import user, node, job, auth
 
 
 @asynccontextmanager
@@ -23,7 +23,7 @@ app.add_middleware(
 app.include_router(user.router, prefix="/api/user")
 app.include_router(node.router, prefix="/api/node")
 app.include_router(job.router, prefix="/api/job")
-
+app.include_router(auth.router, prefix="/api/auth")
 
 @app.get("/")
 def read_root():

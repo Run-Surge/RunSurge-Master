@@ -6,9 +6,10 @@ from typing import Optional, List
 from fastapi import Depends
 from app.db.session import get_db
 from app.schemas.node import NodeCreate
+from sqlalchemy.ext.asyncio import AsyncSession
 
 class NodeRepository(BaseRepository[Node]):
-    def __init__(self, session: Session):
+    def __init__(self, session: AsyncSession):
         super().__init__(session, Node)
 
     async def create_node(self, node: NodeCreate) -> Node:
@@ -43,5 +44,5 @@ class NodeRepository(BaseRepository[Node]):
         result = await self.session.execute(statement)
         return result.scalars().all()
 
-def get_node_repository(session: Session = Depends(get_db)) -> NodeRepository:
+async def get_node_repository(session: AsyncSession = Depends(get_db)) -> NodeRepository:
     return NodeRepository(session)

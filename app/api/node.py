@@ -1,5 +1,4 @@
-from fastapi import Depends, HTTPException, APIRouter
-from app.db.repositories.node import NodeRepository, get_node_repository
+from fastapi import Depends, APIRouter
 from app.schemas.node import NodeCreate, NodeRead
 from app.services.node import NodeService, get_node_service
 

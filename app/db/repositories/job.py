@@ -5,9 +5,10 @@ from app.db.repositories.base import BaseRepository
 from typing import List, Optional
 from fastapi import Depends
 from app.db.session import get_db
+from sqlalchemy.ext.asyncio import AsyncSession
 
 class JobRepository(BaseRepository[Job]):
-    def __init__(self, session: Session):
+    def __init__(self, session: AsyncSession):
         super().__init__(session, Job)
 
     async def create_job(self, user_id: int) -> Job:
@@ -27,5 +28,5 @@ class JobRepository(BaseRepository[Job]):
         return job
     
     
-def get_job_repository(session: Session = Depends(get_db)) -> JobRepository:
+async def get_job_repository(session: AsyncSession = Depends(get_db)) -> JobRepository:
     return JobRepository(session)

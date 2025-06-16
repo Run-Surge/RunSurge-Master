@@ -16,3 +16,7 @@ class UserRead(UserBase):
 
 class UserUpdate(UserBase):
     pass
+
+class UserLogin(BaseModel):
+    username_or_email: str
+    password: str

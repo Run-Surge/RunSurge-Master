@@ -1,12 +1,15 @@
 from fastapi import Depends, APIRouter
-from app.schemas.user import UserCreate, UserRead
-from app.services.user import UserService, get_user_service     
-
+from app.core.security import get_current_user_optional
+from app.db.models.scheme import User
 
 router = APIRouter()
 
 
-    
-@router.post("/", response_model=UserRead)
-async def create_user(user: UserCreate, user_service: UserService = Depends(get_user_service)):
-    return await user_service.create_user(user)
+@router.get("/me")
+def get_current_user(current_user: User = Depends(get_current_user_optional)):
+    if not current_user:
+        return {
+            "user": None,
+            "message": "User not found"
+        }
+    return current_user
