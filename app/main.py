@@ -10,7 +10,15 @@ async def lifespan(app: FastAPI):
     await init_db()
     yield
 
-app = FastAPI(lifespan=lifespan)
+app = FastAPI(
+    title="RunSurge Master API",
+    description="API for managing distributed computing tasks across worker nodes",
+    version="1.0.0",
+    docs_url="/docs",  # Swagger UI endpoint
+    redoc_url="/redoc",  # ReDoc endpoint
+    openapi_url="/openapi.json",  # OpenAPI schema endpoint
+    lifespan=lifespan
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -20,12 +28,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(user.router, prefix="/api/user")
-app.include_router(node.router, prefix="/api/node")
-app.include_router(job.router, prefix="/api/job")
-app.include_router(auth.router, prefix="/api/auth")
+app.include_router(user.router, prefix="/api/user", tags=["Users"])
+app.include_router(node.router, prefix="/api/node", tags=["Nodes"])
+app.include_router(job.router, prefix="/api/job", tags=["Jobs"])
+app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
 
-@app.get("/")
+@app.get("/", tags=["Root"])
 def read_root():
     return {"message": "Welcome to the Job Management API"}
 

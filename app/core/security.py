@@ -41,14 +41,14 @@ class SecurityManager:
             "token_type": "bearer"
         }
 
-    def create_access_token(self, data: dict, expires_delta: Optional[timedelta] = timedelta(minutes=60)) -> str:
+    def create_access_token(self, data: dict, expires_delta: Optional[timedelta] = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)) -> str:
         to_encode = data.copy()
         expire = datetime.now(timezone.utc) + expires_delta
         to_encode.update({"exp": expire, "type": "access"})
         encoded_jwt = jwt.encode(to_encode, self.secret_key, algorithm=self.algorithm)
         return encoded_jwt
 
-    def create_refresh_token(self, data: dict, expires_delta: Optional[timedelta] = timedelta(days=7)) -> str:
+    def create_refresh_token(self, data: dict, expires_delta: Optional[timedelta] = timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)) -> str:
         to_encode = data.copy()
         expire = datetime.now(timezone.utc) + expires_delta
         to_encode.update({"exp": expire, "type": "refresh"})

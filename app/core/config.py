@@ -1,19 +1,22 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from urllib.parse import quote_plus
+from typing import Optional
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env")
 
     SECRET_KEY: str
-    ALGORITHM: str
-    ACCESS_TOKEN_EXPIRE_MINUTES: int
-    REFRESH_TOKEN_EXPIRE_DAYS: int
+    ALGORITHM: Optional[str] = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: Optional[int] = 60
+    REFRESH_TOKEN_EXPIRE_DAYS: Optional[int] = 7
 
     DB_USER: str
     DB_PASSWORD: str
     DB_HOST: str
     DB_NAME: str
     DB_PORT: int
+
+    MASTER_PORT: Optional[int] = 8000
 
     @property
     def DATABASE_URL(self) -> str:
