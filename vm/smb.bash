@@ -1,0 +1,1 @@
+mount -t cifs //10.0.2.2/qemu_share /mnt/win -o user=qemuguest,password=1234,vers=2.0
