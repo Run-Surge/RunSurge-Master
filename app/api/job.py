@@ -1,16 +1,26 @@
-from fastapi import Depends, HTTPException, APIRouter
+from fastapi import Depends, HTTPException, APIRouter, Form
 from app.db.repositories.job import JobRepository, get_job_repository
-from app.schemas.job import JobCreate, JobRead
+from app.schemas.job import JobRead, JobCreate
 from app.db.session import get_db
 from sqlalchemy.ext.asyncio import AsyncSession
-
+from app.services.job import get_job_service
+from typing import Optional
+from fastapi import UploadFile, File
+from app.core.security import get_current_user
+from app.db.models.scheme import User
+import logging
 router = APIRouter()
 
 @router.post("/", response_model=JobRead)
-async def create_job(job: JobCreate, session: AsyncSession = Depends(get_db)):
-    #TODO: use job service instead of job repository
-    job_repo = JobRepository(session)
-    user = await job_repo.get_by_id(job.user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found.")
-    return await job_repo.create_job(job, user.user_id)
+async def create_job(
+    file: UploadFile = File(...),
+    session: AsyncSession = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
+):
+    logging.info(f"HEREERRERERE: {file}")  
+    job_service = get_job_service(session)
+    return await job_service.create_job_with_script(
+        user_id=current_user["user_id"],
+        file=file,
+    )
+

@@ -2,6 +2,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import select
 from app.db.models.scheme import Job, JobStatus
 from app.db.repositories.base import BaseRepository
+from app.schemas.job import JobCreate
 from typing import List, Optional
 from fastapi import Depends
 from app.db.session import get_db
@@ -10,9 +11,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 class JobRepository(BaseRepository[Job]):
     def __init__(self, session: AsyncSession):
         super().__init__(session, Job)
-
-    async def create_job(self, user_id: int) -> Job:
-        job = Job(user_id=user_id)
+    async def create_job(self, job_data: JobCreate) -> Job:
+        job = Job(
+            user_id=job_data.user_id,
+        )
+        
         return await self.create(job)
 
     async def get_jobs_by_user(self, user_id: int) -> List[Job]:
@@ -23,6 +26,13 @@ class JobRepository(BaseRepository[Job]):
         job = await self.get_by_id(job_id)
         if job:
             job.status = status
+            await self.session.commit()
+            await self.session.refresh(job)
+        return job
+    async def update_job_script_name(self, job_id: int, script_name: str) -> Optional[Job]:
+        job = await self.get_by_id(job_id)
+        if job:
+            job.script_name = script_name
             await self.session.commit()
             await self.session.refresh(job)
         return job

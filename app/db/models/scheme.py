@@ -94,22 +94,26 @@ class Job(Base):
     user_id = Column(Integer, ForeignKey("user.user_id"))
     status = Column(SQLEnum(JobStatus), default=JobStatus.pending)
     created_at = Column(DateTime, default=datetime.now)
-
+    script_name = Column(String, nullable=True)
+    
     # Relationships
     user = relationship("User", back_populates="jobs")
     tasks = relationship("Task", back_populates="job")
-    data = relationship("Data", back_populates="job")
+    # One-to-many relationship: one job can have multiple data files
+    data_files = relationship("Data", back_populates="job")
+
 
 class Data(Base):
     __tablename__ = "data"
     
     data_id = Column(Integer, primary_key=True, autoincrement=True)
-    job_id = Column(Integer, ForeignKey("job.job_id"))
+    path = Column(String)
+    job_id = Column(Integer, ForeignKey("job.job_id"))  # Keep this - Data belongs to Job
     size_bytes = Column(Integer)
     created_at = Column(DateTime, default=datetime.now)
 
     # Relationships
-    job = relationship("Job", back_populates="data")
+    job = relationship("Job", back_populates="data_files")
     locations = relationship("DataLocation", back_populates="data")
     tasks = relationship("Task", back_populates="data")
 
