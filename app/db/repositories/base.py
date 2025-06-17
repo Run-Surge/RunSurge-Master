@@ -4,6 +4,8 @@ from typing import Optional, List, TypeVar, Generic, Type
 
 T=TypeVar('T')
 
+#TODO: check db commits, enable rollback
+
 class BaseRepository(Generic[T]):
     def __init__(self, session: AsyncSession, model: Type[T]):
         self.session = session

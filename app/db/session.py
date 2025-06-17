@@ -4,7 +4,8 @@ from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
 from urllib.parse import quote_plus
 from app.core.config import settings
-
+from contextlib import asynccontextmanager
+from typing import AsyncGenerator
 
 engine = create_async_engine(settings.DATABASE_URL, echo=False)
 AsyncSessionLocal = sessionmaker(
@@ -26,4 +27,26 @@ async def get_db():
         try:
             yield session
         finally:
+            await session.close()
+
+@asynccontextmanager
+async def get_db_context() -> AsyncGenerator[AsyncSession, None]:
+    """
+    An async context manager that provides a database session.
+    It yields a DB session and ensures it's closed upon exiting the 'async with' block.
+    
+    gets used in gRPC server
+    usage:
+    async with get_db_context() as session:
+        user_service = get_user_service(session)
+        user = await user_service.get_user_by_id(user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found.")
+        return user
+    """
+    async with AsyncSessionLocal() as session:
+        try:
+            yield session
+        finally:
+            print("Closing database session")
             await session.close()

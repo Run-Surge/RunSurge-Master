@@ -7,6 +7,7 @@ from typing import Optional
 from app.db.models.scheme import User
 from app.schemas.user import UserLogin
 from app.core.security import security_manager
+from sqlalchemy.ext.asyncio import AsyncSession
 
 class UserService:
     def __init__(self, user_repo: UserRepository):
@@ -34,6 +35,8 @@ class UserService:
             raise HTTPException(status_code=401, detail="Invalid password")
         return db_user
 
-def get_user_service(user_repo: UserRepository = Depends(get_user_repository)) -> UserService:
-    return UserService(user_repo)
-    
+def get_user_service(session: AsyncSession) -> UserService:
+    """
+        Just hides the abstraction of dependency injection
+    """
+    return UserService(UserRepository(session))
