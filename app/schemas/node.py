@@ -1,13 +1,14 @@
 from pydantic import BaseModel, ConfigDict
 from datetime import datetime
 from typing import Optional
+from app.utils.constants import DEFAULT_PORT
 
 class NodeBase(BaseModel):
     node_name: str
     ram: int
     cpu_cores: int
-    ip_address: Optional[str] = None
-    port: Optional[int] = None
+    ip_address: str
+    port: Optional[int] = DEFAULT_PORT
 
 class NodeRead(NodeBase):
     node_id: int

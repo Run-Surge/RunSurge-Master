@@ -1,7 +1,7 @@
 from app.db.repositories.node import NodeRepository
 from app.schemas.node import NodeCreate
-from fastapi import Depends, HTTPException  
-from app.db.repositories.node import get_node_repository
+from fastapi import HTTPException  
+from sqlalchemy.ext.asyncio import AsyncSession
 
 class NodeService:
     def __init__(self, node_repo: NodeRepository):
@@ -10,8 +10,10 @@ class NodeService:
     async def create_node(self, node: NodeCreate, user_id: int):
         if await self.node_repo.node_name_exists(node.node_name, user_id):
             raise HTTPException(status_code=400, detail="Node name already exists")
-        
         return await self.node_repo.create_node(node, user_id)
 
-def get_node_service(node_repo: NodeRepository = Depends(get_node_repository)) -> NodeService:
-    return NodeService(node_repo)
+    async def get_all_nodes(self):
+        return await self.node_repo.get_all_nodes()
+
+def get_node_service(session: AsyncSession) -> NodeService:
+    return NodeService(NodeRepository(session))

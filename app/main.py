@@ -32,6 +32,8 @@ app.include_router(user.router, prefix="/api/user", tags=["Users"])
 app.include_router(node.router, prefix="/api/node", tags=["Nodes"])
 app.include_router(job.router, prefix="/api/job", tags=["Jobs"])
 app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
+## we should add a router for me to get certain user resources
+
 
 @app.get("/", tags=["Root"])
 def read_root():

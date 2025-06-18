@@ -6,6 +6,7 @@ from enum import Enum
 from typing import Optional, List
 from datetime import datetime
 import uuid
+from app.utils.constants import DEFAULT_PORT
 
 # everything concenred with data is in bytes
 
@@ -61,8 +62,8 @@ class Node(Base):
     user_id = Column(Integer, ForeignKey("user.user_id"))
     ram = Column(Integer)
     cpu_cores = Column(Integer)
-    ip_address = Column(String, default=None)
-    port = Column(Integer, default=None)
+    ip_address = Column(String, nullable=False)
+    port = Column(Integer, default=DEFAULT_PORT)
     created_at = Column(DateTime, default=datetime.now)
 
     # Relationships

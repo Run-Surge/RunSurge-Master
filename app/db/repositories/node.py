@@ -44,5 +44,15 @@ class NodeRepository(BaseRepository[Node]):
         result = await self.session.execute(statement)
         return result.scalars().all()
 
+    async def get_nodes(self, user_id: int) -> List[Node]:
+        statement = select(Node).where(Node.user_id == user_id)
+        result = await self.session.execute(statement)
+        return result.scalars().all()
+    
+    async def get_all_nodes(self) -> List[Node]:
+        statement = select(Node)
+        result = await self.session.execute(statement)
+        return result.scalars().all()
+
 async def get_node_repository(session: AsyncSession = Depends(get_db)) -> NodeRepository:
     return NodeRepository(session)
