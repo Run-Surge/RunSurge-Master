@@ -195,4 +195,5 @@ cython_debug/
 
 commands.txt
 Jobs/*
-Parrallization/temp/*
+Parallelization/temp/ddg_parsed
+Parallelization/temp/memory_parsed

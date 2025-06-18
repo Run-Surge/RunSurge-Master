@@ -1,0 +1,86 @@
+{
+    "data = add1(data)#0:add1(data)": {
+        "def add1(data):": 576,
+        "header = data[0]": 628,
+        "rows = data[1:]": 1204,
+        "new_data = []": 1260,
+        "for row in data:\n    new_row = []\n    for value in row:\n        new_value = int(value) + 1\n        new_row.append(new_value)\n    new_data.append(new_row)": 13468000,
+        "new_data.insert(0, header)": 13468228,
+        "aggregation": "s:new_data",
+        "return new_data": 13468228
+    },
+    "z = add1(data)#1:add1(data)": {
+        "def add1(data):": 12344836,
+        "header = data[0]": 13373572,
+        "rows = data[1:]": 24689724,
+        "new_data = []": 24689780,
+        "for row in data:\n    new_row = []\n    for value in row:\n        new_value = int(value) + 1\n        new_row.append(new_value)\n    new_data.append(new_row)": 42662120,
+        "new_data.insert(0, header)": 43691032,
+        "aggregation": "s:new_data",
+        "return new_data": 43691032
+    },
+    "x = hello2()#2:hello2()": {
+        "def hello2():": 0,
+        "v = 4 + 3": 28,
+        "aggregation": ":",
+        "return v": 28
+    },
+    "y = z.copy()#3:copy()": {
+        "return z.copy()": 15719752
+    },
+    "z = hello(z)#4:hello(z)": {
+        "def hello(z):": 15719752,
+        "z = z + 1": 15719908,
+        "aggregation": ":",
+        "return z": 15719908
+    },
+    "a = hello(z)#5:hello(z)": {
+        "def hello(z):": 15719908,
+        "z = z + 1": 15720064,
+        "aggregation": ":",
+        "return z": 15720064
+    },
+    "k = hello(a)#6:hello(z)": {
+        "def hello(z):": 15720064,
+        "z = z + 1": 15720220,
+        "aggregation": ":",
+        "return z": 15720220
+    },
+    "a = hello(x)#7:hello(z)": {
+        "def hello(z):": 28,
+        "z = z + 1": 88,
+        "aggregation": ":",
+        "return z": 88
+    },
+    "z = hello(a)#8:hello(z)": {
+        "def hello(z):": 88,
+        "z = z + 1": 148,
+        "aggregation": ":",
+        "return z": 148
+    },
+    "b = hello3(x, y, z)#9:hello3(x, y, z)": {
+        "def hello3(x, y, z):": 15719928,
+        "x = x + 1": 15719988,
+        "x = x + (y + z + 5)": 31440164,
+        "aggregation": ":",
+        "return x": 31440164
+    },
+    "c = hello(z)#10:hello(z)": {
+        "def hello(z):": 148,
+        "z = z + 1": 208,
+        "aggregation": ":",
+        "return z": 208
+    },
+    "d = hello(x)#11:hello(z)": {
+        "def hello(z):": 28,
+        "z = z + 1": 88,
+        "aggregation": ":",
+        "return z": 88
+    },
+    "output = calc(x, y, z, a, b, c, d)#12:calc(x, y, z, a, b, c, d)": {
+        "def calc(x, y, z, a, b, c, d):": 31440576,
+        "x = [['Output', x, y, z, a, b, c, d]]": 62881379,
+        "aggregation": ":",
+        "return x": 62881379
+    }
+}
