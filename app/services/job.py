@@ -7,7 +7,7 @@ from fastapi import UploadFile
 from app.utils.utils import Create_directory, save_file
 import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.utils.constants import DIRECTORY_PATH, FILE_SIZE_LIMIT
+from app.utils.constants import JOBS_DIRECTORY_PATH, FILE_SIZE_LIMIT
 
 class JobService:
     def __init__(self, job_repo: JobRepository):
@@ -32,9 +32,9 @@ class JobService:
             user_id=user_id
         )
         job = await self.job_repo.create_job(job_data)        
-        Create_directory(f"{DIRECTORY_PATH}/{job.job_id}")
+        Create_directory(f"{JOBS_DIRECTORY_PATH}/{job.job_id}")
         random_name = str(uuid.uuid4())
-        save_file(file, f"{DIRECTORY_PATH}/{job.job_id}/{random_name}.py")
+        save_file(file, f"{JOBS_DIRECTORY_PATH}/{job.job_id}/{random_name}.py")
         await self.job_repo.update_job_script_name(job.job_id, random_name)
         return job
 

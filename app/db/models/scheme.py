@@ -109,8 +109,10 @@ class Data(Base):
     
     data_id = Column(Integer, primary_key=True, autoincrement=True)
     path = Column(String)
-    job_id = Column(Integer, ForeignKey("job.job_id"))  # Keep this - Data belongs to Job
+    job_id = Column(Integer, ForeignKey("job.job_id")) 
     size_bytes = Column(Integer)
+    #TODO: FIX
+    # This when inseted, it appears null in db
     created_at = Column(DateTime, default=datetime.now)
 
     # Relationships

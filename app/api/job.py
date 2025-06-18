@@ -1,4 +1,7 @@
 from fastapi import Depends, HTTPException, APIRouter, Form
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from app.db.repositories.job import JobRepository, get_job_repository
 from app.schemas.job import JobRead, JobCreate
 from app.db.session import get_db
@@ -8,6 +11,8 @@ from typing import Optional
 from fastapi import UploadFile, File
 from app.core.security import get_current_user
 from app.db.models.scheme import User
+from app.utils.constants import JOBS_DIRECTORY_PATH
+from Parallelization.Parallelizer import Parallelizer
 import logging
 router = APIRouter()
 
@@ -17,10 +22,12 @@ async def create_job(
     session: AsyncSession = Depends(get_db), 
     current_user: User = Depends(get_current_user)
 ):
-    logging.info(f"HEREERRERERE: {file}")  
     job_service = get_job_service(session)
-    return await job_service.create_job_with_script(
+    job = await job_service.create_job_with_script(
         user_id=current_user["user_id"],
         file=file,
     )
+    path_name=f"{JOBS_DIRECTORY_PATH}/{job.job_id}/{job.script_name}.py"
+    Parallelizer(path_name,job.job_id)
+    return job
 

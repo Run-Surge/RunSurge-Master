@@ -7,7 +7,7 @@ class Settings(BaseSettings):
 
     SECRET_KEY: str
     ALGORITHM: Optional[str] = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: Optional[int] = 60
+    ACCESS_TOKEN_EXPIRE_MINUTES: Optional[int] = 360
     REFRESH_TOKEN_EXPIRE_DAYS: Optional[int] = 7
 
     DB_USER: str
