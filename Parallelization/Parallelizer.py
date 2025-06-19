@@ -16,7 +16,7 @@ from collections import defaultdict
 from typing import List, Dict, Any
 
 
-SAVE_PATH = f"Parallelization/temp"
+global SAVE_PATH
 
 def group_by_needs_with_wait_index(
     statements: List[Dict[str, Any]],
@@ -140,9 +140,9 @@ def dependency_analyzer(folder):
         result = group_by_needs_with_wait_index(nodes, edges)
    
         index = int(re.search(r'\d+', os.path.basename(jsons[i])).group(0))
-        print("DEBUGGIN ",f"{SAVE_PATH}/ddg_parsed/main_lists.json")
+        print("DEBUGGIN ",f"{SAVE_PATH}/main_lists.json")
         if index == 0:
-            json.dump(result, open(f"{SAVE_PATH}/ddg_parsed/main_lists.json", 'w'), indent=4)
+            json.dump(result, open(f"{SAVE_PATH}/main_lists.json", 'w'), indent=4)
         else:
             #! remove aggregation keys from the result
             for item in result:
@@ -152,7 +152,7 @@ def dependency_analyzer(folder):
                 ]
             result = [item for item in result if item["statements"]]
 
-            json.dump(result, open(f"{SAVE_PATH}/ddg_parsed/function{index}_lists.json", 'w'), indent=4)
+            json.dump(result, open(f"{SAVE_PATH}/function{index}_lists.json", 'w'), indent=4)
         results.append(result)
     return results
 
@@ -373,11 +373,13 @@ def get_memory_foortprint(file_path, entry_point, functions,job_id):
             }
             for outer_key, inner_dict in main_lines_footprint.items()
         }        
+        #ERROR: 
+        main_lines_footprint = {"main": main_lines_footprint}
         # print("Main Lines Footprint:", main_lines_footprint)
-        json.dump(main_lines_footprint, open(f'{SAVE_PATH}/memory_parsed/main_lines_footprint.json', 'w'), indent=4)
+        json.dump(main_lines_footprint, open(f'{SAVE_PATH}/main_lines_footprint.json', 'w'), indent=4)
         func_lines_footprint = substitute_outer_keys(func_lines_footprint)
         # print("Function Lines Footprint:", func_lines_footprint)
-        json.dump(func_lines_footprint, open(f'{SAVE_PATH}/memory_parsed/func_lines_footprint.json', 'w'), indent=4)                
+        json.dump(func_lines_footprint, open(f'{SAVE_PATH}/func_lines_footprint.json', 'w'), indent=4)                
                         
             
                 
@@ -393,6 +395,8 @@ def get_memory_foortprint(file_path, entry_point, functions,job_id):
     get_main_footprint(entry_point, functions, memory_parser)
     # print(memory_parser.vars)
 def Parallelizer(path,job_id):
+    global SAVE_PATH
+    SAVE_PATH = f"Jobs/{job_id}"
     print(f"Parallelizing {path}")
     error_file = "errors.txt"
     print("I am running")
@@ -411,13 +415,17 @@ def Parallelizer(path,job_id):
     if graph:
         print(f"2. DDG built successfully for {filename}.")
         # graph.visualize_graph_data()
-        graph.save_to_json('temp')
+        # create the directory if not exists
+        temp_path = f'Jobs/{job_id}'
+        if not os.path.exists(temp_path):
+            os.makedirs(temp_path)
+        graph.save_to_json(temp_path)
         functions = graph.parser.functions
         entry_point= graph.parser.entry_point
     else:
         print(f"2. Failed to build DDG for {filename}. Check {error_file} for details.")   
     
-    dep_2d_list = dependency_analyzer('temp')
+    dep_2d_list = dependency_analyzer(temp_path)
     if dep_2d_list:
         print(f"3. Dependency analysis completed for {filename}.")
     

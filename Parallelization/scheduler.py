@@ -11,7 +11,6 @@ from app.utils.utils import convert_nodes_into_Json
 from app.services.node import get_node_service
 from app.db.session import  get_db_context
 
-from app.utils.constants import FUNC_FOOTPRINT_FILE, MAIN_FOOTPRINT_FILE, MAIN_LISTS_FILE
 global_session = None
 
 # ==============================================================================
@@ -834,7 +833,7 @@ if __name__ == "__main__":
 # ==============================================================================
 # 6. MAIN EXECUTION BLOCK
 # ==============================================================================
-async def main():
+async def scheduler(job_id):
     """Main function to parse arguments and run the scheduling workflow."""
     global global_session
     async with get_db_context() as session:
@@ -844,9 +843,9 @@ async def main():
         nodes_data = convert_nodes_into_Json(all_nodes)
         print(nodes_data)        
         try:
-            with open(MAIN_LISTS_FILE, 'r') as f: initial_blocks = json.load(f)
-            with open(MAIN_FOOTPRINT_FILE, 'r') as f: live_vars_data = json.load(f)
-            with open(FUNC_FOOTPRINT_FILE, 'r') as f: func_footprints_data = json.load(f)
+            with open(f"Jobs/{job_id}/main_lists.json", 'r') as f: initial_blocks = json.load(f)
+            with open(f"Jobs/{job_id}/main_lines_footprint.json", 'r') as f: live_vars_data = json.load(f)
+            with open(f"Jobs/{job_id}/func_lines_footprint.json", 'r') as f: func_footprints_data = json.load(f)
         except FileNotFoundError as e:
             print(f"Error: Could not find required input file: {e.filename}")
             return
@@ -912,5 +911,3 @@ async def main():
     global_session = None
 
 
-if __name__ == '__main__':
-    asyncio.run(main())
