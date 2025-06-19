@@ -1,18 +1,9 @@
 import json
+import argparse
 import ast
 import re
 import math
-import sys
-import os
-import asyncio
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.utils.utils import convert_nodes_into_Json
-from app.services.node import get_node_service
-from app.db.session import  get_db_context
-
-
-global_session = None
 
 # ==============================================================================
 # 1. CORE MEMORY CALCULATION LOGIC
@@ -1086,118 +1077,141 @@ if __name__ == "__main__":
 # ==============================================================================
 # 6. MAIN EXECUTION BLOCK
 # ==============================================================================
-async def scheduler(job_id):
+def main():
     """Main function to parse arguments and run the scheduling workflow."""
-    global global_session
-    async with get_db_context() as session:
-        global_session = session
-        node_service = get_node_service(session)
-        all_nodes = await node_service.get_all_nodes()
-        nodes_data = convert_nodes_into_Json(all_nodes)
-        print(nodes_data)        
-        try:
-            with open(f"Jobs/{job_id}/main_lists.json", 'r') as f: initial_blocks = json.load(f)
-            with open(f"Jobs/{job_id}/main_lines_footprint.json", 'r') as f: live_vars_data = json.load(f)
-            with open(f"Jobs/{job_id}/func_lines_footprint.json", 'r') as f: func_footprints_data = json.load(f)
-        except FileNotFoundError as e:
-            print(f"Error: Could not find required input file: {e.filename}")
-            return
-        # --- Prepare necessary data structures ---
-        full_program_statements = [
-            stmt for block in initial_blocks for stmt in block["statements"]
+    parser = argparse.ArgumentParser(
+        description="A smart scheduler that first tries to fit a whole program, then resorts to merging blocks.",
+        formatter_class=argparse.RawTextHelpFormatter,
+    )
+    # ... (argument parsing remains the same) ...
+    parser.add_argument(
+        "blocks_file", help="Path to the initial blocks definition JSON file."
+    )
+    parser.add_argument("live_vars_file", help="Path to live variables JSON file.")
+    parser.add_argument(
+        "func_footprints_file", help="Path to function footprints JSON file."
+    )
+    parser.add_argument("nodes_file", help="Path to nodes JSON file.")
+    parser.add_argument(
+        "--generate-test-files",
+        action="store_true",
+        help="Generate test JSON files with default names before running.",
+    )
+    args = parser.parse_args()
+
+    # --- Load all data from files ---
+    try:
+        with open(args.blocks_file, "r") as f:
+            initial_blocks = json.load(f)
+        with open(args.live_vars_file, "r") as f:
+            live_vars_data = json.load(f)
+        with open(args.func_footprints_file, "r") as f:
+            func_footprints_data = json.load(f)
+        with open(args.nodes_file, "r") as f:
+            nodes_data = json.load(f)
+    except FileNotFoundError as e:
+        print(f"Error: Could not find required input file: {e.filename}")
+        return
+
+    # --- Prepare necessary data structures ---
+    full_program_statements = [
+        stmt for block in initial_blocks for stmt in block["statements"]
+    ]
+    stmt_to_original_idx_map = {
+        stmt: i
+        for i, block in enumerate(initial_blocks)
+        for stmt in block["statements"]
+    }
+
+    # --- REFACTORED WORKFLOW LOGIC ---
+
+    # Attempt 1: Schedule the whole program
+    consolidated_schedule_info = schedule_program_whole(
+        initial_blocks,  # Pass initial_blocks to get keys
+        full_program_statements,
+        nodes_data,
+        live_vars_data,
+        func_footprints_data,
+        stmt_to_original_idx_map,
+    )
+
+    # These variables need to be defined for the final file writing
+    final_blocks = []
+    scheduling_info = []
+    consolidated_schedule = []
+    parallelization_plan = {}
+
+    if consolidated_schedule_info is not None:
+        # SUCCESS Case: The program fits on a single node.
+        print("\nProgram fits on a single node. Preparing direct execution plan.")
+        # The `consolidated_schedule_info` is already in the correct format.
+        # Create a placeholder `consolidated_schedule` for the JSON dump.
+        consolidated_schedule = [
+            {"key": info["key"], "statements": info["statements"]}
+            for info in consolidated_schedule_info
         ]
-        stmt_to_original_idx_map = {
-            stmt: i
-            for i, block in enumerate(initial_blocks)
-            for stmt in block["statements"]
-        }
+        # `parallelization_plan` will be empty as nothing failed.
 
-        # --- REFACTORED WORKFLOW LOGIC ---
+    else:
+        # FAILURE Case: The program does not fit. Run the merging and parallelization workflow.
+        print(
+            "\nProgram does not fit on a single node. Initiating multi-stage scheduling."
+        )
 
-        # Attempt 1: Schedule the whole program
-        consolidated_schedule_info = schedule_program_whole(
-            initial_blocks,  # Pass initial_blocks to get keys
-            full_program_statements,
+        # Stage 2: Merge blocks
+        final_blocks, scheduling_info = process_and_merge_blocks(
+            initial_blocks, nodes_data, func_footprints_data, live_vars_data
+        )
+
+        # Stage 3: Consolidate and finalize schedule
+        consolidated_schedule, consolidated_schedule_info = consolidate_to_block_format(
+            final_blocks,
+            scheduling_info,
             nodes_data,
             live_vars_data,
             func_footprints_data,
             stmt_to_original_idx_map,
         )
 
-        # These variables need to be defined for the final file writing
-        final_blocks = []
-        scheduling_info = []
-        consolidated_schedule = []
-        parallelization_plan = {}
-
-        if consolidated_schedule_info is not None:
-            # SUCCESS Case: The program fits on a single node.
-            print("\nProgram fits on a single node. Preparing direct execution plan.")
-            # The `consolidated_schedule_info` is already in the correct format.
-            # Create a placeholder `consolidated_schedule` for the JSON dump.
-            consolidated_schedule = [
-                {"key": info["key"], "statements": info["statements"]}
-                for info in consolidated_schedule_info
-            ]
-            # `parallelization_plan` will be empty as nothing failed.
-
-        else:
-            # FAILURE Case: The program does not fit. Run the merging and parallelization workflow.
-            print(
-                "\nProgram does not fit on a single node. Initiating multi-stage scheduling."
-            )
-
-            # Stage 2: Merge blocks
-            final_blocks, scheduling_info = process_and_merge_blocks(
-                initial_blocks, nodes_data, func_footprints_data, live_vars_data
-            )
-
-            # Stage 3: Consolidate and finalize schedule
-            consolidated_schedule, consolidated_schedule_info = consolidate_to_block_format(
-                final_blocks,
-                scheduling_info,
-                nodes_data,
-                live_vars_data,
-                func_footprints_data,
-                stmt_to_original_idx_map,
-            )
-
-            # Stage 4: Attempt data parallelization for failed blocks
-            unschedulable_final_blocks = [
-                info for info in consolidated_schedule_info if not info["is_schedulable"]
-            ]
-            parallelization_plan = plan_data_parallelization(
-                unschedulable_final_blocks,
-                nodes_data,
-                live_vars_data,
-                func_footprints_data,
-            )
-
-        # --- FINAL STEP: GENERATE EXECUTION PLAN (Now runs in both cases) ---
-        generate_execution_plan(
-            consolidated_schedule_info,
-            parallelization_plan,
+        # Stage 4: Attempt data parallelization for failed blocks
+        unschedulable_final_blocks = [
+            info for info in consolidated_schedule_info if not info["is_schedulable"]
+        ]
+        parallelization_plan = plan_data_parallelization(
+            unschedulable_final_blocks,
             nodes_data,
             live_vars_data,
             func_footprints_data,
         )
 
-        # --- FINAL OUTPUTS (Now runs in both cases) ---
-        # Note: some files will be empty if the program fits on one node, which is correct.
-        with open(f"Jobs/{job_id}/final.json", 'w') as f:
-            json.dump(final_blocks, f, indent=4)
-        with open(f"Jobs/{job_id}/blocks.json", 'w')  as f:
-            json.dump(scheduling_info, f, indent=4)
-        with open(f"Jobs/{job_id}/final_schedule_info.json", 'w') as f:
-            json.dump(consolidated_schedule_info, f, indent=4)
-        with open(f"Jobs/{job_id}/consolidated_schedule.json", 'w') as f:
-            json.dump(consolidated_schedule, f, indent=4)
-        with open(f"Jobs/{job_id}/parallelization_plan.json", 'w') as f:
-            json.dump(parallelization_plan, f, indent=4)
+    # --- FINAL STEP: GENERATE EXECUTION PLAN (Now runs in both cases) ---
+    generate_execution_plan(
+        consolidated_schedule_info,
+        parallelization_plan,
+        nodes_data,
+        live_vars_data,
+        func_footprints_data,
+    )
 
-        print(
-            f"\nFinal consolidated schedule has been written to 'final_schedule_info.json'"
-        )
-        print("Data parallelization plan has been written to 'parallelization_plan.json'")
-        print("Executable node scripts and master plan have been generated.")
+    # --- FINAL OUTPUTS (Now runs in both cases) ---
+    # Note: some files will be empty if the program fits on one node, which is correct.
+    with open("final.json", "w") as f:
+        json.dump(final_blocks, f, indent=4)
+    with open("blocks.json", "w") as f:
+        json.dump(scheduling_info, f, indent=4)
+    with open("final_schedule_info.json", "w") as f:
+        json.dump(consolidated_schedule_info, f, indent=4)
+    with open("consolidated_schedule.json", "w") as f:
+        json.dump(consolidated_schedule, f, indent=4)
+    with open("parallelization_plan.json", "w") as f:
+        json.dump(parallelization_plan, f, indent=4)
 
+    print(
+        f"\nFinal consolidated schedule has been written to 'final_schedule_info.json'"
+    )
+    print("Data parallelization plan has been written to 'parallelization_plan.json'")
+    print("Executable node scripts and master plan have been generated.")
+
+
+if __name__ == "__main__":
+    main()

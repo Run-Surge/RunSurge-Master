@@ -373,8 +373,6 @@ def get_memory_foortprint(file_path, entry_point, functions,job_id):
             }
             for outer_key, inner_dict in main_lines_footprint.items()
         }        
-        #ERROR: 
-        main_lines_footprint = {"main": main_lines_footprint}
         # print("Main Lines Footprint:", main_lines_footprint)
         json.dump(main_lines_footprint, open(f'{SAVE_PATH}/main_lines_footprint.json', 'w'), indent=4)
         func_lines_footprint = substitute_outer_keys(func_lines_footprint)
