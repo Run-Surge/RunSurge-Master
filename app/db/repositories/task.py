@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import select
-from app.db.models.scheme import Task
+from app.db.models.scheme import Task, Data
 from app.schemas.task import TaskCreate, TaskUpdate
 from app.db.repositories.base import BaseRepository
 from fastapi import Depends
@@ -10,11 +10,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 class TaskRepository(BaseRepository[Task]):
     def __init__(self, session: AsyncSession):
         super().__init__(session, Task)
-    async def create_task(self, task_data: TaskCreate) -> Task:
+    async def create_task(self, job_id: int, data_ids: list[int], required_ram: int, node_id: int) -> Task:
         task = Task(
-            job_id=task_data.job_id,
-            data_id=task_data.data_id,
-            required_ram=task_data.required_ram,
+            node_id=node_id,
+            job_id=job_id,
+            data_dependencies=[Data(data_id=data_id) for data_id in data_ids],
+            required_ram=required_ram,
         )
         return await self.create(task)
     

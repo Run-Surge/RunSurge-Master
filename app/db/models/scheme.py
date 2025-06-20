@@ -70,6 +70,7 @@ class Node(Base):
     heartbeat = relationship("NodeHeartbeat", back_populates="node", uselist=False)
     resources = relationship("NodeResources", back_populates="node", uselist=False)
     tasks = relationship("Task", back_populates="node")
+    provided_data = relationship("Data", back_populates="provider_node")
     data_locations = relationship("DataLocation", back_populates="node")
     logs = relationship("NodeLog", back_populates="node")
     payments = relationship("Payment", back_populates="node")
@@ -108,18 +109,19 @@ class Data(Base):
     __tablename__ = "data"
     
     data_id = Column(Integer, primary_key=True, autoincrement=True)
-    path = Column(String)
+    file_name = Column(String)
     job_id = Column(Integer, ForeignKey("job.job_id")) 
-    size_bytes = Column(Integer)
+    provider_id = Column(Integer, ForeignKey("node.node_id"))
     #TODO: FIX
     # This when inseted, it appears null in db
     created_at = Column(DateTime, default=datetime.now)
 
     # Relationships
     job = relationship("Job", back_populates="data_files")
+    provider_node = relationship("Node", back_populates="provided_data")
     locations = relationship("DataLocation", back_populates="data")
-    tasks = relationship("Task", back_populates="data")
-
+    # Many-to-many relationship: each data can be used by many tasks
+    dependent_tasks = relationship("Task", secondary="task_data_dependency", back_populates="data_dependencies")
 class DataLocation(Base):
     __tablename__ = "data_location"
     
@@ -132,11 +134,9 @@ class DataLocation(Base):
 
 class Task(Base):
     __tablename__ = "task"
-    
     task_id = Column(Integer, primary_key=True, autoincrement=True)
     job_id = Column(Integer, ForeignKey("job.job_id"))
-    node_id = Column(Integer, ForeignKey("node.node_id"), nullable=True)
-    data_id = Column(Integer, ForeignKey("data.data_id"))
+    node_id = Column(Integer, ForeignKey("node.node_id"))
     status = Column(SQLEnum(TaskStatus), default=TaskStatus.pending)
     required_ram = Column(Integer)
     started_at = Column(DateTime, nullable=True)
@@ -146,22 +146,14 @@ class Task(Base):
     # Relationships
     job = relationship("Job", back_populates="tasks")
     node = relationship("Node", back_populates="tasks")
-    data = relationship("Data", back_populates="tasks")
-    dependencies = relationship(
-        "Task",
-        secondary="task_dependency",
-        primaryjoin="Task.task_id==TaskDependency.task_id",
-        secondaryjoin="Task.task_id==TaskDependency.depends_on_task_id",
-        backref="dependent_tasks"
-    )
+    data_dependencies = relationship("Data", secondary="task_data_dependency", back_populates="dependent_tasks")
     logs = relationship("NodeLog", back_populates="task")
     payments = relationship("Payment", back_populates="task")
 
-class TaskDependency(Base):
-    __tablename__ = "task_dependency"
-    
+class TaskDataDependency(Base):
+    __tablename__ = "task_data_dependency"
     task_id = Column(Integer, ForeignKey("task.task_id"), primary_key=True)
-    depends_on_task_id = Column(Integer, ForeignKey("task.task_id"), primary_key=True)
+    data_id = Column(Integer, ForeignKey("data.data_id"), primary_key=True)
 
 class NodeLog(Base):
     __tablename__ = "node_log"

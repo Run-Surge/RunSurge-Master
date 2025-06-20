@@ -12,5 +12,6 @@ def save_file(file: UploadFile, path: str):
         f.write(file.file.read())
 
 def convert_nodes_into_Json(data: list[Node]):
-    ## convert the node.name and node.ram into a json object
-    return [{"name": node.node_name, "memory": node.ram} for node in data]
+    nodes_list = [{"name": node.node_name, "memory": node.ram} for node in data]
+    node_map = {node.node_name: node.node_id for node in data}
+    return nodes_list, node_map

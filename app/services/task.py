@@ -10,9 +10,9 @@ class TaskService:
     def __init__(self, task_repo: TaskRepository):
         self.task_repo = task_repo
 
-    async def create_task(self, task_data: TaskCreate) -> Task:
+    async def create_task(self, job_id: int, data_ids: list[int], required_ram: int, node_id: int) -> Task:
         ## we may add validation here, or return true/false
-        return await self.task_repo.create_task(task_data)
+        return await self.task_repo.create_task(job_id, data_ids, required_ram, node_id)
 
     ## This function is not used for endpoints, it is used for internal use only
     ## it should return False if the task is not found or if the task is already assigned to a node

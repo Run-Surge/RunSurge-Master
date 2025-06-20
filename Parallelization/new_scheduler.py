@@ -1,20 +1,18 @@
 import json
+import argparse
 import ast
 import re
 import math
-import sys
+import csv
 import os
-import asyncio
+import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
+from app.utils.constants import JOBS_DIRECTORY_PATH
 from app.utils.utils import convert_nodes_into_Json
 from app.services.node import get_node_service
-from app.services.task import get_task_service
 from app.db.session import  get_db_context
-
-
 global_session = None
-
+input_file = "123456.csv"
 # ==============================================================================
 # 1. CORE MEMORY CALCULATION LOGIC
 # ==============================================================================
@@ -558,6 +556,14 @@ def reconstruct_source_with_indentation(lines_of_code):
 
     return "\n".join(reconstructed_code)
 
+def sanitize_statement_for_filename(statement: str) -> str:
+    """Converts a Python statement into a safe string for a filename."""
+    # Replace common special characters and spaces with underscores
+    sanitized = re.sub(r'[=\s(),.]+', '_', statement)
+    # Collapse multiple underscores into one
+    sanitized = re.sub(r'_+', '_', sanitized)
+    # Remove leading/trailing underscores
+    return sanitized.strip('_')
 
 def plan_data_parallelization(
     unschedulable_blocks, nodes_data, live_vars_data, func_footprints_data
@@ -566,13 +572,10 @@ def plan_data_parallelization(
     For unschedulable blocks, determines if a parallelization plan can be made
     statically or if the decision must be deferred.
 
-    - If a block has NO dependencies on other blocks (keys are all 'var:none'),
-      it attempts to create a parallelization plan.
-    - If a block HAS a dependency, it is flagged as 'Deferred: Requires Feedback'.
+    MODIFIED: For deferred blocks, generates a new 'main_lists.json'-style file
+    for future rescheduling.
     """
     print("\n--- Level 3: Planning Data Parallelization for Failed Blocks ---")
-
-    # ... (Keep the helper functions: reconstruct_source_with_indentation, is_infeasible_due_to_nested_loops, etc.) ...
 
     if not unschedulable_blocks:
         print("No unschedulable blocks to process at this level.")
@@ -595,25 +598,56 @@ def plan_data_parallelization(
         statement = block["statements"][0]
         print(f"\nAnalyzing: '{statement}'")
 
-        # --- NEW GATING LOGIC ---
-        # First, check if the block has any real dependencies.
         block_keys = block.get("key", [])
-        # A real dependency exists if any key has a numeric index part.
         has_real_dependency = any(
             k.split(":")[1].isdigit() for k in block_keys if ":" in k
         )
 
+        # --- MODIFIED LOGIC FOR DEFERRED BLOCKS ---
         if has_real_dependency:
-            print(
-                f"  -> DEFERRED: Block depends on preceding blocks {block_keys}. Flagging for feedback."
-            )
+            print(f"  -> DEFERRED: Block depends on preceding blocks {block_keys}. Generating reschedule file.")
+
+            # 1. Transform original keys into 'var:none' for the new standalone program.
+            # This treats the previous outputs as the new program's primary inputs.
+            new_input_keys = []
+            for key in block_keys:
+                if key == "none:none":
+                    continue # This is not a variable dependency
+                var, _ = key.split(":", 1)
+                new_input_keys.append(f"{var}:none")
+
+            # Create a clean, unique list of input keys.
+            new_input_keys = sorted(list(set(new_input_keys)))
+
+            # 2. Create the data structure for the new main_lists.json file.
+            # It's a list containing a single block.
+            reschedule_program_data = [
+                {
+                    "key": new_input_keys,
+                    "statements": [statement]
+                }
+            ]
+
+            # 3. Generate a safe filename and write the file.
+            sanitized_name = sanitize_statement_for_filename(statement)
+            filename = f"deferred_reschedule_{sanitized_name}.json"
+            
+            try:
+                with open(filename, 'w') as f:
+                    json.dump(reschedule_program_data, f, indent=4)
+                print(f"  -> Successfully wrote reschedule file: {filename}")
+            except IOError as e:
+                print(f"  -> ERROR: Could not write reschedule file {filename}: {e}")
+
+            # 4. Update the parallelization plan to include the new file's path.
             parallelization_plan[statement] = {
                 "status": "Deferred: Requires Feedback",
-                "reason": "This block depends on the output of a preceding block, which must be evaluated first.",
+                "reason": "This block depends on the output of a preceding block. A reschedule file has been generated.",
                 "dependencies": block_keys,
+                "reschedule_file": filename  # Add the new key
             }
-            continue  # Skip to the next unschedulable block
-
+            continue # Move to the next unschedulable block
+        
         # --- If we get here, the block has no preceding dependencies. We can try to plan it. ---
         print("  -> No preceding dependencies. Attempting parallelization plan.")
 
@@ -769,23 +803,37 @@ def build_function_definitions(func_footprints_data):
     return all_functions_code
 
 
+# Place this helper function before `generate_execution_plan` if you haven't already.
+def sanitize_statement_for_filename(statement: str) -> str:
+    """Converts a Python statement into a safe string for a filename."""
+    sanitized = re.sub(r'[=\s(),.]+', '_', statement)
+    sanitized = re.sub(r'_+', '_', sanitized)
+    return sanitized.strip('_')
+
+
+# ==============================================================================
+# 5. FINAL EXECUTION PLAN GENERATION (WITH DATA SPLITTING)
+# ==============================================================================
 def generate_execution_plan(
     consolidated_schedule_info,
     parallelization_plan,
     nodes_data,
     live_vars_data,
-    func_footprints_data,  # Required
+    func_footprints_data,
+    input_header,          # <-- New argument
+    input_data_rows        # <-- New argument
 ):
     """
-    Generates a master schedule, and COMPLETE, well-structured, executable
-    Python scripts and data files for each node.
+    Generates a master schedule and executable scripts.
+    MODIFIED: For parallel tasks, it now pre-splits the primary input data
+    into smaller chunk files for each worker.
     """
-    print("\n--- Generating Final Execution Plan (Executable Code) ---")
+    print("\n--- Generating Final Execution Plan (Executable Code & Split Data) ---")
 
     # --- Phase 0: Setup ---
     if not nodes_data:
         return
-    task_service = get_task_service(global_session)
+
     AGGREGATOR_NAME = "AGGREGATOR_SERVICE"
     WORKER_NODES = [node["name"] for node in nodes_data]
 
@@ -794,8 +842,6 @@ def generate_execution_plan(
     }
     master_plan = ["# Master Execution Schedule\n"]
     get_lhs_var = lambda s: s.split("=")[0].strip()
-
-    # Build all function definitions first
     function_definitions = build_function_definitions(func_footprints_data)
 
     # Create maps for dependency lookups
@@ -817,12 +863,13 @@ def generate_execution_plan(
         for key in valid_keys:
             var, source_idx_str = key.split(":")
             if source_idx_str.isdigit():
-                source_idx = int(source_idx_str)
+                # Corrected to handle 1-based keys from consolidation
+                source_idx_0_based = int(source_idx_str) - 1
                 producer_block = next(
                     (
                         p
                         for p in consolidated_schedule_info
-                        if p["consolidated_block_index"] == source_idx
+                        if p["consolidated_block_index"] == source_idx_0_based
                     ),
                     None,
                 )
@@ -857,8 +904,9 @@ def generate_execution_plan(
             for key in valid_keys:
                 var, source_idx_str = key.split(":")
                 if source_idx_str.isdigit():
-                    source_idx = int(source_idx_str)
-                    source_node = block_to_node_map.get(source_idx, AGGREGATOR_NAME)
+                    # Corrected to handle 1-based keys from consolidation
+                    source_idx_0_based = int(source_idx_str) - 1
+                    source_node = block_to_node_map.get(source_idx_0_based, AGGREGATOR_NAME)
                     plan["python_code"].append(
                         f"    print('--- Loading dependency ---')"
                     )
@@ -904,93 +952,107 @@ def generate_execution_plan(
                 )
                 continue
 
+            # --- MODIFIED PARALLELIZATION LOGIC ---
+            # Check if we have the primary input data to split
+            if input_header is None or input_data_rows is None:
+                master_plan.append(f"\n--- Task '{statement}' (UNPLANNED) ---")
+                master_plan.append(f"  - Status: Failed - Missing primary input data required for splitting.")
+                print(f"Error: Cannot parallelize '{statement}' because --input-data-file was not provided or was invalid.")
+                continue
+
             master_plan.append(f"\n--- Task '{statement}' (PARALLEL) ---")
             output_var = get_lhs_var(statement)
             arg_names_match = re.match(r".*?\((.*)\)", statement)
-            arg_names = (
-                [
-                    arg.strip()
-                    for arg in arg_names_match.groups()[0].split(",")
-                    if arg.strip()
-                ]
-                if arg_names_match
-                else []
-            )
+            arg_names = [arg.strip() for arg in arg_names_match.groups()[0].split(',') if arg.strip()] if arg_names_match else []
             func_name_match = re.search(r"=\s*([\w.]+)\(", statement)
-            func_name = (
-                func_name_match.groups()[0] if func_name_match else "unknown_function"
-            )
+            func_name = func_name_match.groups()[0] if func_name_match else "unknown_function"
+            parallel_arg_name = next(iter(plan_result.get('chunks', {})), None)
+            
+            if not parallel_arg_name:
+                master_plan.append(f"  - Status: Failed - No chunkable argument found in parallelization plan.")
+                print(f"Error: Cannot parallelize '{statement}' because no chunking information was found in the plan.")
+                continue
 
             master_plan.append(f"  - Aggregator: {AGGREGATOR_NAME} (External Service)")
 
-            worker_chunk_assignments = {}
+            worker_chunk_assignments = {} # Placeholder for actual logic
             all_chunk_ids = list(range(plan_result.get("parallelization_factor", 0)))
+            WORKER_NODES = [node["name"] for node in nodes_data]
             for i, chunk_id in enumerate(all_chunk_ids):
                 worker_name = WORKER_NODES[i % len(WORKER_NODES)]
                 if worker_name not in worker_chunk_assignments:
                     worker_chunk_assignments[worker_name] = []
                 worker_chunk_assignments[worker_name].append(chunk_id)
 
+            # --- Data Splitting and Script Generation Loop ---
             for worker_name, assigned_chunks in worker_chunk_assignments.items():
                 worker_plan = node_plans[worker_name]
                 worker_plan["python_code"].append(
                     f"\n    # --- PARALLEL TASK (Fork-Join) for '{statement}' ---"
                 )
 
-                # Load or wait for the full data arrays needed for slicing
-                for arg in arg_names:
-                    if arg not in produced_by_scheduled_blocks:
-                        worker_plan["initial_data"][arg] = live_vars_data.get(
-                            statement, {}
-                        ).get(arg, f"MISSING_DATA_FOR_{arg}")
-                        worker_plan["python_code"].append(
-                            f"    {arg} = initial_data.get('{arg}')"
-                        )
-                    else:
-                        producer_node = "UNKNOWN"
-                        for key_str in valid_keys:
-                            if key_str.startswith(arg + ":"):
-                                producer_node = block_to_node_map.get(
-                                    int(key_str.split(":")[1]), AGGREGATOR_NAME
-                                )
-                                break
-                        worker_plan["python_code"].append(
-                            f"    {arg} = wait_for_data('{arg}', from_node='{producer_node}')"
-                        )
-
                 # Process each assigned chunk
                 for chunk_id in assigned_chunks:
-                    chunk_details_dict = {}
-                    for arg, chunks in plan_result["chunks"].items():
-                        if chunk_id < len(chunks):
-                            chunk_details_dict[arg] = chunks[chunk_id]
-
-                    worker_plan["python_code"].append(
-                        f"\n    # -- Sub-Task: Process Chunk {chunk_id} --"
-                    )
-                    worker_plan["python_code"].append(
-                        f"    chunk_params_{chunk_id} = {{}}"
-                    )
-
+                    # Get the specific slice for this chunk
+                    chunk_info = plan_result['chunks'][parallel_arg_name][chunk_id]
+                    start_index = chunk_info['start_index']
+                    # The parallelization plan is on the data rows, not the full file
+                    # So the indices are already correct relative to `input_data_rows`.
+                    end_index = chunk_info['end_index']
                     
-                    for arg, chunk_info in chunk_details_dict.items():
-                        start, end = chunk_info["start_index"], chunk_info["end_index"]
-                        worker_plan["python_code"].append(
-                            f"    chunk_params_{chunk_id}['{arg}'] = {arg}[{start}:{end}]"
-                        )
-
-                    worker_plan["python_code"].append(
-                        f"    print(f'RUNNING PARALLEL TASK for {func_name} on chunk {chunk_id}')"
-                    )
-                    worker_plan["python_code"].append(
-                        f"    partial_result_{chunk_id} = {func_name}(**chunk_params_{chunk_id})"
-                    )
-                    worker_plan["python_code"].append(
-                        f"    send_data('partial_result_for_{output_var}', partial_result_{chunk_id}, consumers=['{AGGREGATOR_NAME}'])"
-                    )
-                    master_plan.append(
-                        f"  - Worker {worker_name} assigned Chunk {chunk_id}."
-                    )
+                    # Create the new chunk data file
+                    chunk_data_for_file = [input_header] + input_data_rows[start_index:end_index]
+                    chunk_filename = f"{parallel_arg_name}_chunk_{chunk_id}_for_{worker_name}.csv"
+                    
+                    try:
+                        # --- CHANGED: Use csv.writer to write the chunk file ---
+                        with open(chunk_filename, 'w', newline='') as f:
+                            writer = csv.writer(f)
+                            writer.writerows(chunk_data_for_file)
+                        master_plan.append(f"  - Worker {worker_name} assigned data chunk file: {chunk_filename}")
+                    except IOError as e:
+                        print(f"Error writing chunk CSV file {chunk_filename}: {e}")
+                        continue
+                        
+                    # --- Update worker script to use the new chunk file ---
+                    sanitized_stmt_name = sanitize_statement_for_filename(statement)
+                    chunk_file_key = f"chunk_file_{sanitized_stmt_name}_{chunk_id}"
+                    worker_plan['initial_data'][chunk_file_key] = chunk_filename
+                    
+                    worker_plan['python_code'].append(f"\n    # -- Sub-Task: Process from file {chunk_filename} --")
+                    
+                    # --- CHANGED: Generate code to load from CSV instead of JSON ---
+                    worker_plan['python_code'].append(f"    print('--- Loading data from chunk CSV file: {chunk_filename} ---')")
+                    worker_plan['python_code'].append(f"    with open(initial_data['{chunk_file_key}'], 'r', newline='') as f:")
+                    worker_plan['python_code'].append(f"        reader = csv.reader(f)")
+                    worker_plan['python_code'].append(f"        {parallel_arg_name}_chunk_data = list(reader)")
+                    # Assemble arguments for the function call
+                    # Create a dictionary to hold arguments for the function call string
+                    func_call_args = {}
+                    for arg in arg_names:
+                        if arg == parallel_arg_name:
+                             func_call_args[arg] = f"{parallel_arg_name}_chunk_data"
+                        else:
+                            # Handle loading for other, non-parallelized arguments
+                            if arg not in produced_by_scheduled_blocks:
+                                worker_plan["initial_data"][arg] = live_vars_data.get(statement, {}).get(arg, f"MISSING_DATA_FOR_{arg}")
+                                worker_plan["python_code"].append(f"    {arg} = initial_data.get('{arg}')")
+                            else:
+                                producer_node = "UNKNOWN"
+                                for key_str in valid_keys:
+                                    if key_str.startswith(arg + ":"):
+                                        source_idx_0_based = int(key_str.split(":")[1]) - 1
+                                        producer_node = block_to_node_map.get(source_idx_0_based, AGGREGATOR_NAME)
+                                        break
+                                worker_plan["python_code"].append(f"    {arg} = wait_for_data('{arg}', from_node='{producer_node}')")
+                            func_call_args[arg] = arg
+                    
+                    call_str = ", ".join([f"{k}={v}" for k, v in func_call_args.items()])
+                    
+                    # Code to run the function and send the partial result
+                    worker_plan['python_code'].append(f"    print(f'RUNNING PARALLEL TASK for {func_name} on data from {chunk_filename}')")
+                    worker_plan['python_code'].append(f"    partial_result_{chunk_id} = {func_name}({call_str})")
+                    worker_plan['python_code'].append(f"    send_data('partial_result_for_{output_var}', partial_result_{chunk_id}, consumers=['{AGGREGATOR_NAME}'])")
 
             # Add the JOIN barrier to all active workers
             for worker_name in worker_chunk_assignments.keys():
@@ -1012,6 +1074,7 @@ def generate_execution_plan(
     python_harness_preamble = """
 import json
 import time
+import csv
 
 # --- Communication & Execution Stubs ---
 # In a real system, these would interact with a message queue (e.g., RabbitMQ, ZeroMQ)
@@ -1044,7 +1107,6 @@ def send_data(variable_name, data, consumers):
                 json.dump(plan_details["initial_data"], f, indent=4)
             print(f"Initial data for {node_name} written to {node_name}_data.json")
 
-            # Correctly join the list of python code lines with newlines
             scheduled_tasks_code = "\n".join(plan_details["python_code"])
 
             main_logic = f"""
@@ -1085,18 +1147,16 @@ if __name__ == "__main__":
     except IOError as e:
         print(f"Error writing execution plan files: {e}")
 
-
 # ==============================================================================
 # 6. MAIN EXECUTION BLOCK
 # ==============================================================================
 async def scheduler(job_id):
-    """Main function to parse arguments and run the scheduling workflow."""
     global global_session
     async with get_db_context() as session:
         global_session = session
         node_service = get_node_service(session)
         all_nodes = await node_service.get_all_nodes()
-        nodes_data, node_map = convert_nodes_into_Json(all_nodes)
+        nodes_data = convert_nodes_into_Json(all_nodes)
         print(nodes_data)        
         try:
             with open(f"Jobs/{job_id}/main_lists.json", 'r') as f: initial_blocks = json.load(f)
@@ -1105,7 +1165,28 @@ async def scheduler(job_id):
         except FileNotFoundError as e:
             print(f"Error: Could not find required input file: {e.filename}")
             return
-        # --- Prepare necessary data structures ---
+        input_header = None
+        input_data_rows = None
+        if input_file:
+            try:
+                # Use newline='' for csv reader as recommended by Python docs
+                input_file = f"{JOBS_DIRECTORY_PATH}/{job_id}/{input_file}"
+                with open(input_file, 'r', newline='') as f:
+                    reader = csv.reader(f)
+                    primary_input_data = list(reader)
+
+                if len(primary_input_data) > 1:
+                    input_header = primary_input_data[0]
+                    input_data_rows = primary_input_data[1:]
+                    print(f"Successfully loaded primary input data from '{input_file}' ({len(input_data_rows)} data rows).")
+                else:
+                    print(f"Warning: Input CSV file '{input_file}' must have a header and at least one data row.")
+            except FileNotFoundError:
+                print(f"Error: Primary input CSV file not found at '{input_file}'")
+            except Exception as e:
+                print(f"An error occurred while reading the CSV file: {e}")
+
+        # --- The rest of the workflow is exactly the same ---
         full_program_statements = [
             stmt for block in initial_blocks for stmt in block["statements"]
         ]
@@ -1115,11 +1196,8 @@ async def scheduler(job_id):
             for stmt in block["statements"]
         }
 
-        # --- REFACTORED WORKFLOW LOGIC ---
-
-        # Attempt 1: Schedule the whole program
         consolidated_schedule_info = schedule_program_whole(
-            initial_blocks,  # Pass initial_blocks to get keys
+            initial_blocks,
             full_program_statements,
             nodes_data,
             live_vars_data,
@@ -1127,75 +1205,43 @@ async def scheduler(job_id):
             stmt_to_original_idx_map,
         )
 
-        # These variables need to be defined for the final file writing
         final_blocks = []
         scheduling_info = []
         consolidated_schedule = []
         parallelization_plan = {}
 
-        if consolidated_schedule_info is not None:
-            # SUCCESS Case: The program fits on a single node.
-            print("\nProgram fits on a single node. Preparing direct execution plan.")
-            # The `consolidated_schedule_info` is already in the correct format.
-            # Create a placeholder `consolidated_schedule` for the JSON dump.
-            consolidated_schedule = [
-                {"key": info["key"], "statements": info["statements"]}
-                for info in consolidated_schedule_info
-            ]
-            # `parallelization_plan` will be empty as nothing failed.
-
+        if consolidated_schedule_info is None:
+            # Run merging and parallelization if the whole program doesn't fit
+            final_blocks, scheduling_info = process_and_merge_blocks(initial_blocks, nodes_data, func_footprints_data, live_vars_data)
+            consolidated_schedule, consolidated_schedule_info = consolidate_to_block_format(final_blocks, scheduling_info, nodes_data, live_vars_data, func_footprints_data, stmt_to_original_idx_map)
+            unschedulable_final_blocks = [info for info in consolidated_schedule_info if not info["is_schedulable"]]
+            parallelization_plan = plan_data_parallelization(unschedulable_final_blocks, nodes_data, live_vars_data, func_footprints_data)
         else:
-            # FAILURE Case: The program does not fit. Run the merging and parallelization workflow.
-            print(
-                "\nProgram does not fit on a single node. Initiating multi-stage scheduling."
-            )
+            consolidated_schedule = [{"key": info["key"], "statements": info["statements"]} for info in consolidated_schedule_info]
 
-            # Stage 2: Merge blocks
-            final_blocks, scheduling_info = process_and_merge_blocks(
-                initial_blocks, nodes_data, func_footprints_data, live_vars_data
-            )
 
-            # Stage 3: Consolidate and finalize schedule
-            consolidated_schedule, consolidated_schedule_info = consolidate_to_block_format(
-                final_blocks,
-                scheduling_info,
-                nodes_data,
-                live_vars_data,
-                func_footprints_data,
-                stmt_to_original_idx_map,
-            )
-
-            # Stage 4: Attempt data parallelization for failed blocks
-            unschedulable_final_blocks = [
-                info for info in consolidated_schedule_info if not info["is_schedulable"]
-            ]
-            parallelization_plan = plan_data_parallelization(
-                unschedulable_final_blocks,
-                nodes_data,
-                live_vars_data,
-                func_footprints_data,
-            )
-
-        # --- FINAL STEP: GENERATE EXECUTION PLAN (Now runs in both cases) ---
+        # --- FINAL STEP: GENERATE EXECUTION PLAN ---
         generate_execution_plan(
             consolidated_schedule_info,
             parallelization_plan,
             nodes_data,
             live_vars_data,
             func_footprints_data,
+            input_header,
+            input_data_rows
         )
 
         # --- FINAL OUTPUTS (Now runs in both cases) ---
         # Note: some files will be empty if the program fits on one node, which is correct.
-        with open(f"Jobs/{job_id}/final.json", 'w') as f:
+        with open("final.json", "w") as f:
             json.dump(final_blocks, f, indent=4)
-        with open(f"Jobs/{job_id}/blocks.json", 'w')  as f:
+        with open("blocks.json", "w") as f:
             json.dump(scheduling_info, f, indent=4)
-        with open(f"Jobs/{job_id}/final_schedule_info.json", 'w') as f:
+        with open("final_schedule_info.json", "w") as f:
             json.dump(consolidated_schedule_info, f, indent=4)
-        with open(f"Jobs/{job_id}/consolidated_schedule.json", 'w') as f:
+        with open("consolidated_schedule.json", "w") as f:
             json.dump(consolidated_schedule, f, indent=4)
-        with open(f"Jobs/{job_id}/parallelization_plan.json", 'w') as f:
+        with open("parallelization_plan.json", "w") as f:
             json.dump(parallelization_plan, f, indent=4)
 
         print(
@@ -1204,3 +1250,6 @@ async def scheduler(job_id):
         print("Data parallelization plan has been written to 'parallelization_plan.json'")
         print("Executable node scripts and master plan have been generated.")
 
+
+if __name__ == "__main__":
+    main()
