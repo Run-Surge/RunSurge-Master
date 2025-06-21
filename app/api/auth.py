@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter()
 
-@router.post("/register", response_model=UserRegisterRead)
+@router.post("/register")
 async def register(user: UserRegisterCreate, response: Response, session: AsyncSession = Depends(get_db)):
     user_service = get_user_service(session)
     if await user_service.user_exists(user.username, user.email):
@@ -36,9 +36,13 @@ async def register(user: UserRegisterCreate, response: Response, session: AsyncS
         max_age=604800  
     )
     
-    return db_user  
+    return {
+        "user": db_user,
+        "message": "User registered successfully",
+        "success": True
+    }
 
-@router.post("/login", response_model=UserLoginRead)
+@router.post("/login")
 async def login(user: UserLoginCreate, response: Response, session: AsyncSession = Depends(get_db)):
     user_service = get_user_service(session)
     db_user = await user_service.login_user(user)
@@ -63,9 +67,13 @@ async def login(user: UserLoginCreate, response: Response, session: AsyncSession
         max_age=604800
     )
     
-    return db_user
+    return {
+        "user": db_user,
+        "message": "User logged in successfully",
+        "success": True
+    }
 
-@router.post("/refresh", response_model=TokenResponse)
+@router.post("/refresh")
 async def refresh(refresh_token: RefreshRequest, response: Response, session: AsyncSession = Depends(get_db)):
     user_service = get_user_service(session)
     try:
