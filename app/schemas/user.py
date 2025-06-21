@@ -6,17 +6,15 @@ class UserBase(BaseModel):
     username: str
     email: str
 
-class UserCreate(BaseModel):
-    username: str
-    email: str
+class UserLoginCreate(BaseModel):
+    username_or_email: str
     password: str
 
-class UserRead(UserBase):
-    created_at: datetime
+class UserLoginRead(BaseModel):
+    user_id: int
+    username: str
+    email: str
+
 
 class UserUpdate(UserBase):
     pass
-
-class UserLogin(BaseModel):
-    username_or_email: str
-    password: str

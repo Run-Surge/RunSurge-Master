@@ -7,7 +7,12 @@ class DataService:
         self.data_repo = data_repo
     # -1 means data is not provided by any node (i.e. data is in the master node)
     async def create_data(self, file_name: str, job_id: int, provider_id: int =- 1):
-        return await self.data_repo.create_data(file_name, job_id, provider_id)
+        try:
+            print("in service",file_name, job_id, provider_id)
+            return await self.data_repo.create_data(file_name, job_id, provider_id)
+        except Exception as e:
+            print("error in service",e)
+            raise e
     
     async def create_data_request(self, data_request: DataCreate):
         return await self.data_repo.create_data(data_request.file_name, data_request.job_id, -1)

@@ -1,5 +1,4 @@
-# models/schema.py
-from sqlalchemy import Column, String, Integer, Float, DateTime, ForeignKey, Enum as SQLEnum, UniqueConstraint  
+from sqlalchemy import Column, String, Integer, Float, DateTime, ForeignKey, Enum as SQLEnum, UniqueConstraint
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from enum import Enum
@@ -8,7 +7,7 @@ from datetime import datetime
 import uuid
 from app.utils.constants import DEFAULT_PORT
 
-# everything concenred with data is in bytes
+# everything concerned with data is in bytes
 
 Base = declarative_base()
 
@@ -71,7 +70,6 @@ class Node(Base):
     resources = relationship("NodeResources", back_populates="node", uselist=False)
     tasks = relationship("Task", back_populates="node")
     provided_data = relationship("Data", back_populates="provider_node")
-    data_locations = relationship("DataLocation", back_populates="node")
     logs = relationship("NodeLog", back_populates="node")
     payments = relationship("Payment", back_populates="node")
     user = relationship("User", back_populates="nodes")
@@ -101,7 +99,6 @@ class Job(Base):
     # Relationships
     user = relationship("User", back_populates="jobs")
     tasks = relationship("Task", back_populates="job")
-    # One-to-many relationship: one job can have multiple data files
     data_files = relationship("Data", back_populates="job")
 
 
@@ -110,27 +107,14 @@ class Data(Base):
     
     data_id = Column(Integer, primary_key=True, autoincrement=True)
     file_name = Column(String)
-    job_id = Column(Integer, ForeignKey("job.job_id")) 
-    provider_id = Column(Integer, ForeignKey("node.node_id"))
-    #TODO: FIX
-    # This when inseted, it appears null in db
+    job_id = Column(Integer, ForeignKey("job.job_id"))
+    provider_id = Column(Integer, ForeignKey("node.node_id"), nullable=True)
+    data_location = Column(SQLEnum(DataLocationType), default=DataLocationType.master)
     created_at = Column(DateTime, default=datetime.now)
-
     # Relationships
     job = relationship("Job", back_populates="data_files")
     provider_node = relationship("Node", back_populates="provided_data")
-    locations = relationship("DataLocation", back_populates="data")
-    # Many-to-many relationship: each data can be used by many tasks
     dependent_tasks = relationship("Task", secondary="task_data_dependency", back_populates="data_dependencies")
-class DataLocation(Base):
-    __tablename__ = "data_location"
-    
-    data_id = Column(Integer, ForeignKey("data.data_id"), primary_key=True)
-    node_id = Column(Integer, ForeignKey("node.node_id"), primary_key=True)
-
-    # Relationships
-    data = relationship("Data", back_populates="locations")
-    node = relationship("Node", back_populates="data_locations")
 
 class Task(Base):
     __tablename__ = "task"
@@ -148,7 +132,7 @@ class Task(Base):
     node = relationship("Node", back_populates="tasks")
     data_dependencies = relationship("Data", secondary="task_data_dependency", back_populates="dependent_tasks")
     logs = relationship("NodeLog", back_populates="task")
-    payments = relationship("Payment", back_populates="task")
+    payment = relationship("Payment", back_populates="task", uselist=False)
 
 class TaskDataDependency(Base):
     __tablename__ = "task_data_dependency"
@@ -174,13 +158,13 @@ class Payment(Base):
     payment_id = Column(Integer, primary_key=True, autoincrement=True)
     node_id = Column(Integer, ForeignKey("node.node_id"))
     amount = Column(Float)
-    task_id = Column(Integer, ForeignKey("task.task_id"), nullable=True)
+    task_id = Column(Integer, ForeignKey("task.task_id"), unique=True)
     status = Column(SQLEnum(PaymentStatus), default=PaymentStatus.pending)
     created_at = Column(DateTime, default=datetime.now)
 
     # Relationships
     node = relationship("Node", back_populates="payments")
-    task = relationship("Task", back_populates="payments")
+    task = relationship("Task", back_populates="payment") 
 
 class NodeResources(Base):
     __tablename__ = "node_resources"

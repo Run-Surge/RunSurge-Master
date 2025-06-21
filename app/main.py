@@ -1,10 +1,11 @@
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
 from fastapi.middleware.cors import CORSMiddleware
-from app.db.session import init_db
+from app.db.session import init_db,AsyncSessionLocal
 from app.api import user, node, job, auth
 from threading import Thread, Event
 from app.utils.worker import worker_main
+
 
 global worker_thread, worker_stop_event
 worker_thread: Thread = None
@@ -15,7 +16,7 @@ async def lifespan(app: FastAPI):
     global worker_thread, worker_stop_event
 
     worker_stop_event = Event()
-    worker_thread = Thread(target=worker_main, args=(worker_stop_event,), daemon=False)
+    worker_thread = Thread(target=worker_main, args=(worker_stop_event,AsyncSessionLocal), daemon=False)
     worker_thread.start()
     print("Background worker thread started.")
 
@@ -47,13 +48,17 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://localhost:3002",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-app.include_router(user.router, prefix="/api/user", tags=["Users"])
+app.include_router(user.router, prefix="/api/users", tags=["Users"])
 app.include_router(node.router, prefix="/api/node", tags=["Nodes"])
 app.include_router(job.router, prefix="/api/job", tags=["Jobs"])
 app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
