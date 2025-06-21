@@ -21,3 +21,15 @@ class NodeCreate(NodeBase):
 
 class NodeUpdate(NodeBase):
     pass
+
+
+class NodeRegisterGRPC(BaseModel):
+    user_id: int
+    machine_fingerprint: str
+    memory_bytes: int
+    ip_address: str
+    port: int
+
+class NodeUpdateGRPC(BaseModel):
+    node_id: int
+    is_alive: bool
