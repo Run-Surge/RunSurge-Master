@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, Float, DateTime, ForeignKey, Enum as SQLEnum, UniqueConstraint
+from sqlalchemy import Column, String, Integer, Float, DateTime, ForeignKey, Enum as SQLEnum, UniqueConstraint, Boolean 
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from enum import Enum
@@ -57,13 +57,13 @@ class Node(Base):
     __tablename__ = "node"
     
     node_id = Column(Integer, primary_key=True, autoincrement=True)
-    node_name = Column(String)
     user_id = Column(Integer, ForeignKey("user.user_id"))
     ram = Column(Integer)
-    cpu_cores = Column(Integer)
     ip_address = Column(String, nullable=False)
     port = Column(Integer, default=DEFAULT_PORT)
     created_at = Column(DateTime, default=datetime.now)
+    machine_fingerprint = Column(String, nullable=False)
+    is_alive = Column(Boolean, default=False)   
 
     # Relationships
     heartbeat = relationship("NodeHeartbeat", back_populates="node", uselist=False)
@@ -75,7 +75,7 @@ class Node(Base):
     user = relationship("User", back_populates="nodes")
 
     __table_args__ = (
-        UniqueConstraint("node_name", "user_id", name="uq_node_name_user_id"), # Ensure user doesn't have duplicate node names
+        UniqueConstraint("machine_fingerprint", "user_id", name="uq_machine_fingerprint_user_id"), # Ensure user doesn't have duplicate node names
     )
 
 class NodeHeartbeat(Base):

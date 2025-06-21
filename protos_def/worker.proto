@@ -1,0 +1,81 @@
+syntax = "proto3";
+
+package worker_api;
+
+import "common.proto";
+import "google/protobuf/empty.proto";
+
+
+// --- Enums specific to Worker status ---
+
+enum WorkerState {
+  WORKER_STATE_UNSPECIFIED = 0; // Default, should not be used
+  WORKER_STATE_IDLE = 1;        // Worker is ready to accept jobs
+  WORKER_STATE_BUSY = 2;        // Worker is currently processing a job
+  WORKER_STATE_INITIALIZING = 3;// Worker is starting up
+  WORKER_STATE_SHUTTING_DOWN = 4;// Worker is in the process of shutting down
+}
+
+
+// --- Messages specific to WorkerService RPCs ---
+
+// Detailed status of a Worker, returned by GetWorkerStatus.
+message WorkerStatus {
+  WorkerState state = 1;
+  int64 current_job_id = 2; // ID of the job currently being processed, if any
+  // Potentially add resource info:
+  // float cpu_load_percent = 5;
+  // int64 memory_free_bytes = 6;
+  // int64 disk_free_bytes = 7;
+}
+
+message OutputDataInfo {
+  int64 data_id = 1;
+  string data_name = 2;
+}
+
+// Details of a job assigned to a Worker.
+message TaskAssignment {
+  int64 task_id = 1;
+  bytes python_file = 2; // Python file
+  string python_file_name = 3; // Python file name
+  repeated int64 required_data_ids = 4; // Data id
+  repeated OutputDataInfo output_data_infos = 5; // Output data info
+  int64 job_id = 6; // Job id
+}
+
+
+message DataUploadRequest {
+  oneof payload {
+    project_common.DataInfo data_info = 2;
+    project_common.DataChunk chunk = 1;
+  }
+}
+
+
+message DataNotification {
+  int64 task_id = 1;
+  int64 data_id = 2;
+  string data_name = 3;
+  string ip_address = 4;
+  int32 port = 5;
+  string hash = 6;
+}
+
+service WorkerService {
+  rpc GetWorkerStatus(google.protobuf.Empty) returns (WorkerStatus);
+
+  rpc AssignTask(TaskAssignment) returns (project_common.StatusResponse);
+
+  rpc ReceiveData(stream DataUploadRequest) returns (project_common.StatusResponse);
+
+  rpc GetDataMetadata(project_common.DataIdentifier) returns (project_common.DataMetadata);
+
+  rpc StreamData(project_common.DataIdentifier) returns (stream project_common.DataChunk);
+
+  rpc DeleteCachedData(project_common.DataIdentifier) returns (project_common.StatusResponse);
+
+  rpc NotifyData(DataNotification) returns (project_common.StatusResponse);
+
+  // rpc ShutdownWorker(google.protobuf.Empty) returns (project_common.StatusResponse);
+}
