@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     DB_PORT: int
 
     MASTER_PORT: Optional[int] = 8000
+    GRPC_PORT: Optional[int] = 12345
 
     @property
     def DATABASE_URL(self) -> str:

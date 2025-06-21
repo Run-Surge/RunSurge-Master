@@ -1,0 +1,34 @@
+syntax = "proto3";
+package master_api;
+
+import "google/protobuf/empty.proto";
+import "common.proto";
+
+service MasterService {
+  rpc NodeRegister(NodeRegisterRequest) returns (project_common.StatusResponse);
+  rpc JobComplete(JobCompleteRequest) returns (project_common.StatusResponse);
+  rpc NodeUnregister(NodeUnregisterRequest) returns (project_common.StatusResponse);
+  // rpc NodeHeartbeat(NodeHeartbeatRequest) returns (NodeHeartbeatResponse);
+  // rpc JobFailed(JobFailedRequest) returns (JobFailedResponse);
+
+ 
+}
+
+message NodeUnregisterRequest {
+    int64 node_id = 1;
+}
+
+message NodeRegisterRequest {
+    string username = 1;
+    string password = 2;
+    string machine_fingerprint = 3;
+    int64 memory_bytes = 4;
+}
+
+message JobCompleteRequest {
+    int64 job_id = 1;
+}
+
+
+
+
