@@ -15,5 +15,8 @@ class NodeService:
     async def get_all_nodes(self):
         return await self.node_repo.get_all_nodes()
 
+    async def get_user_nodes(self, user_id: int):
+        return await self.node_repo.get_user_nodes(user_id)
+
 def get_node_service(session: AsyncSession) -> NodeService:
     return NodeService(NodeRepository(session))

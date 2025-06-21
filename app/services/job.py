@@ -44,5 +44,8 @@ class JobService:
     async def update_job(self, job_id: int, job: JobUpdate):
         return await self.job_repo.update_job(job_id, job)
     
+    async def get_user_jobs(self, user_id: int):
+        return await self.job_repo.get_jobs_by_user(user_id)
+    
 def get_job_service(session: AsyncSession) -> JobService:
     return JobService(JobRepository(session))

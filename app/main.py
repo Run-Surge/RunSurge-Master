@@ -16,7 +16,7 @@ async def lifespan(app: FastAPI):
     global worker_thread, worker_stop_event
 
     worker_stop_event = Event()
-    worker_thread = Thread(target=worker_main, args=(worker_stop_event,AsyncSessionLocal), daemon=False)
+    worker_thread = Thread(target=worker_main, args=(worker_stop_event,), daemon=False)
     worker_thread.start()
     print("Background worker thread started.")
 

@@ -44,7 +44,7 @@ class NodeRepository(BaseRepository[Node]):
         result = await self.session.execute(statement)
         return result.scalars().all()
 
-    async def get_nodes(self, user_id: int) -> List[Node]:
+    async def get_user_nodes(self, user_id: int) -> List[Node]:
         statement = select(Node).where(Node.user_id == user_id)
         result = await self.session.execute(statement)
         return result.scalars().all()
