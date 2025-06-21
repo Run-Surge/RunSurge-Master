@@ -7,6 +7,7 @@ from app.db.session import get_db
 from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter()
+# TODO: modify this not to reutrn the password in the response
 
 @router.post("/register")
 async def register(user: UserRegisterCreate, response: Response, session: AsyncSession = Depends(get_db)):

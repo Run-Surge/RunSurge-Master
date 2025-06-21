@@ -12,7 +12,10 @@ from app.utils.utils import convert_nodes_into_Json
 from app.services.task import get_task_service
 from app.services.data import get_data_service
 from app.services.node import get_node_service
+from app.services.job import get_job_service
 from app.db.session import  get_db_context
+from app.db.models.scheme import JobStatus
+import asyncio
 global_session = None
 input_file = "123456.csv"
 # ==============================================================================
@@ -857,30 +860,32 @@ async def generate_execution_plan(
 
         # 1a. Identify initial inputs for this block (dependencies on "none")
         for key in info.get("key", []):
+            if key == "none:none":
+                continue
             if key.endswith(":none"):
+
                 var_name = key.split(":")[0]
                 # Only create if we haven't seen this initial input before
                 if var_name not in db_data_map:
                     print(f"  Creating DB record for initial input: '{var_name}' (file: {input_file})")
                     # The main program's input file is considered the provider with ID -1
                     data_service = get_data_service(global_session)
-                    print("before db calling")
-                    db_data_obj = await data_service.create_data(file_name=input_file, job_id=job_id)
-                    print("after db calling",db_data_obj)
-                    db_data_map[var_name] = db_data_obj
+                    db_data_obj = await data_service.create_data(file_name=input_file, job_id=job_id, provider_id=-1)
+                    print("HERE55555555555555555",db_data_obj.data_id)
+                    db_data_map[var_name] = db_data_obj.data_id
 
-        # 1b. Identify intermediate outputs produced by this block
-        for stmt in info["statements"]:
-            output_var = get_lhs_var(stmt)
-            # Only create if this output variable hasn't been defined yet
-            if output_var not in db_data_map:
-                producer_node_name = info["assigned_node"]["name"]
-                producer_node_id = node_map.get(producer_node_name)
-                print(f"  Creating DB record for intermediate output: '{output_var}' (provider: {producer_node_name} ID: {producer_node_id})")
+        # # 1b. Identify intermediate outputs produced by this block
+        # for stmt in info["statements"]:
+        #     output_var = get_lhs_var(stmt)
+        #     # Only create if this output variable hasn't been defined yet
+        #     if output_var not in db_data_map:
+        #         producer_node_name = info["assigned_node"]["name"]
+        #         producer_node_id = node_map.get(producer_node_name)
+        #         print(f"  Creating DB record for intermediate output: '{output_var}' (provider: {producer_node_name} ID: {producer_node_id})")
                 
-                # The filename for an intermediate output is just its variable name for now
-                db_data_obj = await data_service.create_data(file_name=output_var, job_id=job_id, provider_id=producer_node_id)
-                db_data_map[output_var] = db_data_obj
+        #         # The filename for an intermediate output is just its variable name for now
+        #         db_data_obj = await data_service.create_data(file_name=output_var, job_id=job_id, provider_id=producer_node_id)
+        #         db_data_map[output_var] = db_data_obj.data_id
 
     # --- DB PASS 2: Create Tasks & Generate Scripts ---
     print("\n--- DB Pass 2: Creating Task Records & Generating Scripts ---")
@@ -890,7 +895,9 @@ async def generate_execution_plan(
     WORKER_NODES = [node["name"] for node in nodes_data]
     node_plans = {node["name"]: {"initial_data": {}, "python_code": []} for node in nodes_data}
     master_plan = ["# Master Execution Schedule\n"]
+    print("HERE2222222222")
     function_definitions = build_function_definitions(func_footprints_data)
+    print("HERE111111111111111111111111111")
     
     for info in consolidated_schedule_info:
         block_idx = info["consolidated_block_index"]
@@ -899,20 +906,26 @@ async def generate_execution_plan(
         if info["is_schedulable"]:
             node_name = info["assigned_node"]["name"]
             assigned_node_id = node_map.get(node_name)
-            
             # --- DB Task Creation ---
+            
             required_data_ids = []
             for key in info.get("key", []):
                 var_name = key.split(":")[0]
                 if var_name != "none" and var_name in db_data_map:
-                    required_data_ids.append(db_data_map[var_name].data_id)
+                    print("var_name",var_name)
+                    print("manga",db_data_map[var_name])
+                    required_data_ids.append(db_data_map[var_name])
+                    print("HERE444444444444444444")
             
             # Remove duplicates that might arise from multiple statements needing the same input
             required_data_ids = list(set(required_data_ids))
-            
             print(f"\nCreating DB Task for Block {block_idx} on Node '{node_name}' (ID: {assigned_node_id})")
             print(f"  Inputs require Data IDs: {required_data_ids}")
             task_service = get_task_service(global_session)
+            print("HERE333333333333333333333333333")
+            print("required_data_ids",required_data_ids)
+            print("job_id",job_id)
+            print("assigned_node_id",assigned_node_id)
             await task_service.create_task(
                 job_id=job_id,
                 data_ids=required_data_ids,
@@ -1033,16 +1046,11 @@ if __name__ == "__main__":
 # ==============================================================================
 # 6. MAIN EXECUTION BLOCK
 # ==============================================================================
-async def scheduler(job_id, session):
-        # --- Get all services and node data at the start ---   
-        global global_session
-        global_session = session
-        node_service = get_node_service(session)
-        all_nodes = await node_service.get_all_nodes()
-        # Get both the list and the map from your utility function
-        nodes_data, node_map = convert_nodes_into_Json(all_nodes)
+async def scheduler(job_id: int):
+        node_service = get_node_service(global_session)
+        nodes = await node_service.get_all_nodes()
+        nodes_data, node_map = convert_nodes_into_Json(nodes)
         print("Scheduler using nodes:", nodes_data)
-
         # --- Load all job-specific files ---
         try:
             job_dir = os.path.join(JOBS_DIRECTORY_PATH, str(job_id))
@@ -1138,3 +1146,28 @@ async def scheduler(job_id, session):
         )
         print("Data parallelization plan has been written to 'parallelization_plan.json'")
         print("Executable node scripts and master plan have been generated.")
+
+
+
+async def main():
+    global global_session
+    while True:
+        async with get_db_context() as session:
+            global_session = session
+            try:
+                job_service = get_job_service(session)
+                jobs = await job_service.get_jobs_not_scheduled()
+                print("Jobs:", jobs)
+                print(f"Found {len(jobs)} jobs to schedule")
+                for job in jobs:
+                    ## update job status to running after scheduler is done
+                    await job_service.update_job_status(job.job_id, JobStatus.running)
+                    await scheduler(job.job_id)
+            except Exception as e:
+                print(f"Error: {e}")
+            await asyncio.sleep(10)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
+    

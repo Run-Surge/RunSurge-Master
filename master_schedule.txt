@@ -1,5 +1,0 @@
-# Master Execution Schedule
-
-
---- BLOCK 0 (On nodeA) ---
-  - nodeA executes 13 statement(s).

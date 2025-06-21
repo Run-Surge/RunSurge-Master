@@ -14,9 +14,13 @@ class TaskRepository(BaseRepository[Task]):
         task = Task(
             node_id=node_id,
             job_id=job_id,
-            data_dependencies=[Data(data_id=data_id) for data_id in data_ids],
             required_ram=required_ram,
         )
+        for data_id in data_ids:
+            data = await self.session.execute(select(Data).where(Data.data_id == data_id))
+            data = data.scalar_one_or_none()
+            if data:
+                task.data_dependencies.append(data)
         return await self.create(task)
     
 async def get_task_repository(session: AsyncSession = Depends(get_db)) -> TaskRepository:

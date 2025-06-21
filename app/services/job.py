@@ -8,6 +8,7 @@ from app.utils.utils import Create_directory, save_file
 import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.utils.constants import JOBS_DIRECTORY_PATH, FILE_SIZE_LIMIT
+from app.db.models.scheme import JobStatus
 
 class JobService:
     def __init__(self, job_repo: JobRepository):
@@ -46,6 +47,12 @@ class JobService:
     
     async def get_user_jobs(self, user_id: int):
         return await self.job_repo.get_jobs_by_user(user_id)
+    
+    async def get_jobs_not_scheduled(self):
+        return await self.job_repo.get_pending_jobs()
+    
+    async def update_job_status(self, job_id: int, status: JobStatus):
+        return await self.job_repo.update_job_status(job_id, status)
     
 def get_job_service(session: AsyncSession) -> JobService:
     return JobService(JobRepository(session))

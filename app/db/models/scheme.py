@@ -126,6 +126,8 @@ class Task(Base):
     started_at = Column(DateTime, nullable=True)
     completed_at = Column(DateTime, nullable=True)
     retry_count = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.now)
+    
 
     # Relationships
     job = relationship("Job", back_populates="tasks")

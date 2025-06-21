@@ -20,7 +20,8 @@ class JobRepository(BaseRepository[Job]):
 
     async def get_jobs_by_user(self, user_id: int) -> List[Job]:
         statement = select(Job).where(Job.user_id == user_id)
-        return await self.session.execute(statement).scalars().all()
+        result = await self.session.execute(statement)
+        return result.scalars().all()
 
     async def update_job_status(self, job_id: int, status: JobStatus) -> Optional[Job]:
         job = await self.get_by_id(job_id)
@@ -36,7 +37,10 @@ class JobRepository(BaseRepository[Job]):
             await self.session.commit()
             await self.session.refresh(job)
         return job
-    
+    async def get_pending_jobs(self) -> List[Job]:
+        statement = select(Job).where(Job.status == JobStatus.pending)
+        result = await self.session.execute(statement)
+        return result.scalars().all()
     
 async def get_job_repository(session: AsyncSession = Depends(get_db)) -> JobRepository:
     return JobRepository(session)
