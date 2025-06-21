@@ -66,7 +66,7 @@ def group_by_needs_with_wait_index(
         def get_statement_index(grouped_list,code):
             for i, item in enumerate(grouped_list):
                 if code in item["statements"]:
-                    return i
+                    return i +1 
             return None
         for ind,dictionnary in enumerate(grouped_list):
             keys = dictionnary["key"]
