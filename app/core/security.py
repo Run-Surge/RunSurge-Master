@@ -1,6 +1,6 @@
 from passlib.context import CryptContext
 from datetime import datetime, timedelta, timezone
-from fastapi import HTTPException, Depends, Security
+from fastapi import HTTPException, Depends, Security, Request
 from fastapi.security import OAuth2PasswordBearer
 from typing import Optional, Dict
 from jose import JWTError, jwt
@@ -91,3 +91,20 @@ def get_current_user_optional(token: Optional[str] = Depends(oauth2_scheme_optio
     if token:
         return security_manager.verify_token(token)
     return None
+
+def get_current_user_from_cookie(request: Request):
+    """Get current user from cookie"""
+    token = request.cookies.get("access_token")
+    if not token:
+        raise HTTPException(status_code=401, detail="Access token not found in cookies")
+    return security_manager.verify_token(token)
+
+def get_current_user_from_cookie_optional(request: Request):
+    """Get current user from cookie"""
+    token = request.cookies.get("access_token")
+    if not token:
+        return None
+    try:
+        return security_manager.verify_token(token)
+    except HTTPException:
+        return None

@@ -7,17 +7,19 @@ from fastapi import Depends
 from app.db.session import get_db
 from protos import master_pb2
 from sqlalchemy import select
+from typing import Optional
+
 
 class DataRepository(BaseRepository[Data]):
     def __init__(self, session: AsyncSession):
         super().__init__(session, Data)
 
-    async def create_data(self, file_name: str, job_id: int, provider_id: int = -1):
-        if provider_id == -1:
+    async def create_data(self, file_name: str, job_id: int, parent_task_id: Optional[int] = None):
+        if parent_task_id is None:
             data = Data(file_name=file_name, job_id=job_id)
         else:
-            data = Data(file_name=file_name, job_id=job_id, provider_id=provider_id)    
-        return await self.create(data)
+            data = Data(file_name=file_name, job_id=job_id, parent_task_id=parent_task_id)
+        return await self.create(data)  
     
 
     async def update_data_metadata(self, data_id: int, parent_id: int, data_request: master_pb2.MasterDataNotification):

@@ -6,7 +6,6 @@ from app.utils.constants import DEFAULT_PORT
 class NodeBase(BaseModel):
     node_name: str
     ram: int
-    cpu_cores: int
     ip_address: str
     port: Optional[int] = DEFAULT_PORT
 
@@ -17,7 +16,8 @@ class NodeRead(NodeBase):
     model_config = ConfigDict(from_attributes=True)
 
 class NodeCreate(NodeBase):
-    pass
+    machine_fingerprint: str
+    is_alive: bool
 
 class NodeUpdate(NodeBase):
     pass

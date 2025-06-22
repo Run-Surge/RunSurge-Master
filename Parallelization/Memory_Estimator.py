@@ -180,11 +180,17 @@ class Memory_Parser:
         return tree  # Return the original tree if no match is found
     def _hande_primitives_type_conversions(self, node):
         if isinstance(node.func, ast.Name) and node.func.id == 'int':  
+                if (isinstance(node.args[0], ast.Subscript)):
+                    return 100000000000000000
                 arg_val = self._evaluate_primtive_expression(node.args[0])
                 return int(arg_val)
         elif isinstance(node.func, ast.Name) and node.func.id == 'str':
+            if (isinstance(node.args[0], ast.Subscript)): 
+                return "this is a place holder for a string"
             return str(self._evaluate_primtive_expression(node.args[0]))
         elif isinstance(node.func, ast.Name) and node.func.id == 'float':
+            if (isinstance(node.args[0], ast.Subscript)): 
+                return 100000000000000000.0
             return float(self._evaluate_primtive_expression(node.args[0]))
         return None
     def _handle_mathematical_ops(self, node, left_val, right_val):
@@ -513,6 +519,7 @@ class Memory_Parser:
     def _insertion_handler(self, tree,in_loop = 1):
         def extract_call_info(tree):
             for node in ast.walk(tree):
+                print(f"Node: {ast.dump(node,indent=4)}")  # Debugging: print the node structure
                 if isinstance(node, ast.Call):
                     func_node = node.func
                     if isinstance(func_node, ast.Attribute):

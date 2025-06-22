@@ -43,6 +43,10 @@ class PaymentStatus(str, Enum):
     completed = 'completed'
     failed = 'failed'
 
+class JobType(str, Enum):
+    simple = 'simple'
+    complex = 'complex'     
+
 class User(Base):
     __tablename__ = "user"
     
@@ -60,9 +64,10 @@ class User(Base):
 # ram is in bytes, cpu_cores is in cores
 class Node(Base):
     __tablename__ = "node"
-    
+
     node_id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("user.user_id"))
+    node_name = Column(String, default=str(uuid.uuid4()))
     ram = Column(Integer)
     ip_address = Column(String, nullable=False)
     port = Column(Integer, default=DEFAULT_PORT)
@@ -96,9 +101,12 @@ class Job(Base):
     
     job_id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("user.user_id"))
+    job_name = Column(String)
+    job_type = Column(SQLEnum(JobType))
     status = Column(SQLEnum(JobStatus), default=JobStatus.pending)
     created_at = Column(DateTime, default=datetime.now)
-    script_name = Column(String, nullable=True)
+    script_name = Column(String)
+    script_path = Column(String, nullable=True)
     
     # Relationships
     user = relationship("User", back_populates="jobs")
@@ -115,11 +123,12 @@ class Data(Base):
     parent_task_id = Column(Integer, ForeignKey("task.task_id"), nullable=True)
     data_location = Column(SQLEnum(DataLocationType), default=DataLocationType.master)
     created_at = Column(DateTime, default=datetime.now)
-    status = Column(SQLEnum(DataStatus), default=DataStatus.pending)
+    status = Column(SQLEnum(DataStatus), default=DataStatus.pending)    
+    
     # Relationships
     job = relationship("Job", back_populates="data_files")
-    parent_task = relationship("Task", back_populates="data_files")
     dependent_tasks = relationship("Task", secondary="task_data_dependency", back_populates="data_dependencies")
+    parent_task = relationship("Task", back_populates="data_files")
 
 class Task(Base):
     __tablename__ = "task"
@@ -141,6 +150,8 @@ class Task(Base):
     data_dependencies = relationship("Data", secondary="task_data_dependency", back_populates="dependent_tasks")
     logs = relationship("NodeLog", back_populates="task")
     payment = relationship("Payment", back_populates="task", uselist=False)
+    data_files = relationship("Data", back_populates="parent_task")
+
 
 class TaskDataDependency(Base):
     __tablename__ = "task_data_dependency"
