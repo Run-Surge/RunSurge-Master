@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from contextlib import asynccontextmanager
 from fastapi.middleware.cors import CORSMiddleware
 from app.db.session import init_db
@@ -22,6 +22,7 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -40,5 +41,8 @@ app.include_router(job.router, prefix="/api/job", tags=["Jobs"])
 app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
 
 @app.get("/", tags=["Root"])
-def read_root():
+def read_root(request: Request):
+    request_host = request.client.host
+    request_port = request.client.port
+    print(f"Request from {request_host}:{request_port}")
     return {"message": "Welcome to the Job Management API"}

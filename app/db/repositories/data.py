@@ -5,6 +5,8 @@ from app.db.models.scheme import Data
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import Depends
 from app.db.session import get_db
+from protos import master_pb2
+from sqlalchemy import select
 
 class DataRepository(BaseRepository[Data]):
     def __init__(self, session: AsyncSession):
@@ -17,6 +19,17 @@ class DataRepository(BaseRepository[Data]):
             data = Data(file_name=file_name, job_id=job_id, provider_id=provider_id)    
         return await self.create(data)
     
+
+    async def update_data_metadata(self, data_id: int, parent_id: int, data_request: master_pb2.MasterDataNotification):
+        statement = select(Data).where(Data.data_id == data_id, Data.parent_task_id == parent_id)
+        result = await self.session.execute(statement)
+        data = result.scalar_one_or_none()
+        if data:
+            data.size = data_request.size
+            data.hash = data_request.hash
+            return await self.update(data)
+        return None
+
 
      
 
