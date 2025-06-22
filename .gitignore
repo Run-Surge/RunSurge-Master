@@ -200,3 +200,4 @@ commands.txt
 Jobs/*
 Parallelization/temp/ddg_parsed
 Parallelization/temp/memory_parsed
+test_cases/*
