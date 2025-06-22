@@ -6,7 +6,7 @@ import "common.proto";
 
 service MasterService {
   rpc NodeRegister(NodeRegisterRequest) returns (project_common.StatusResponse);
-  rpc JobComplete(JobCompleteRequest) returns (project_common.StatusResponse);
+  rpc TaskComplete(TaskCompleteRequest) returns (project_common.StatusResponse);
   rpc NodeUnregister(NodeUnregisterRequest) returns (project_common.StatusResponse);
   // rpc NodeHeartbeat(NodeHeartbeatRequest) returns (NodeHeartbeatResponse);
   // rpc JobFailed(JobFailedRequest) returns (JobFailedResponse);
@@ -25,8 +25,8 @@ message NodeRegisterRequest {
     int64 memory_bytes = 4;
 }
 
-message JobCompleteRequest {
-    int64 job_id = 1;
+message TaskCompleteRequest {
+    int64 task_id = 1;
 }
 
 
