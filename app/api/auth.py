@@ -38,7 +38,11 @@ async def register(user: UserRegisterCreate, response: Response, session: AsyncS
     )
     
     return {
-        "user": db_user,
+        "user": UserLoginRead(
+            user_id=db_user.user_id,
+            username=db_user.username,
+            email=db_user.email
+        ),
         "message": "User registered successfully",
         "success": True
     }
@@ -69,7 +73,11 @@ async def login(user: UserLoginCreate, response: Response, session: AsyncSession
     )
     
     return {
-        "user": db_user,
+        "user": UserLoginRead(
+            user_id=db_user.user_id,
+            username=db_user.username,
+            email=db_user.email
+        ),
         "message": "User logged in successfully",
         "success": True
     }
