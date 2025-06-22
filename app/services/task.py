@@ -1,8 +1,11 @@
 from app.db.repositories.task import TaskRepository
-from app.schemas.task import TaskCreate, TaskUpdate
+from app.schemas.task import TaskCreate, TaskUpdate, TaskStatus, TaskDataWithNodeInfo, TaskOutputDependentInfo
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.db.models.scheme import Task
+from app.db.models.scheme import Task, Data, DataStatus, Node
+from typing import List
 import logging
+from protos import master_pb2, worker_pb2
+from app.services.worker_client import WorkerClient
 
 ### Tasks are created internally, not using endpoints
 
@@ -29,6 +32,64 @@ class TaskService:
         await self.task_repo.update(task)
         return True
 
+    async def get_task_output_dependencies_with_node_info(self, task_id: int) -> List[TaskOutputDependentInfo]:
+        """
+        Get all output files from a task and the tasks that depend on them with node information.
+        
+        This query:
+        1. Finds all Data records where parent_task_id = task_id (output files)
+        2. Finds all Tasks that depend on those data files (through TaskDataDependency)
+        3. Gets the Node information for those dependent tasks
+        
+        Returns output files with their dependent tasks and node information.
+        """
+        return await self.task_repo.get_task_dependents_info(task_id)
+    
+    async def _update_status(self, task: Task):
+        # Update status of all output files to completed
+        for data in task.data_files:
+            data.status = DataStatus.completed
+
+        task.status = TaskStatus.completed
+        await self.task_repo.update(task)
+    
+    async def _notify_dependents(self, task: Task):
+        worker_client = WorkerClient()
+        dependents_info = await self.get_task_output_dependencies_with_node_info(task.task_id)
+        node = task.node
+        for dependent in dependents_info:
+            if dependent.node_id is None:
+                #TODO: what to do if the dependent task is not assigned to a node?
+                logging.error(f"Dependent task not assigned to a node: {dependent.dependent_task_id}")
+                continue
+
+            response = await worker_client.notify_data(worker_pb2.DataNotification(
+                task_id=dependent.dependent_task_id,
+                data_id=dependent.data_id,
+                data_name=dependent.file_name,
+                ip_address=node.ip_address,
+                port=node.port
+            ), dependent.node_ip_address, dependent.node_port)
+
+            if not response:
+                logging.error(f"Failed to notify dependent task: {dependent.dependent_task_id}")
+                continue
+
+    async def complete_task(self, completion_info: master_pb2.TaskCompleteRequest) -> bool:
+        try:
+            task = await self.task_repo.get_by_id(completion_info.task_id)
+            if not task:
+                logging.error(f"Task not found: {completion_info.task_id}")
+                return False
+            
+            await self._update_status(task)
+            await self._notify_dependents(task)
+            #TODO: if job is completed, update job status to completed
+            #TODO: if job completed, get output data and aggregate them into a single file
+            return True
+        except Exception as e:
+            logging.error(f"Error completing task: {e}")
+            return False
 
 def get_task_service(session: AsyncSession) -> TaskService:
     return TaskService(TaskRepository(session))

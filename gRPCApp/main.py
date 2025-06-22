@@ -29,7 +29,7 @@ async def main():
     
     server = grpc.aio.server()
     master_pb2_grpc.add_MasterServiceServicer_to_server(MasterServicer(), server)
-    server.add_insecure_port(f'[::]:{settings.GRPC_PORT}')
+    server.add_insecure_port(f'0.0.0.0:{settings.GRPC_PORT}')
     await server.start()
     logger.info(f"Master server started on port {settings.GRPC_PORT}")
     setup_signal_handlers(server)

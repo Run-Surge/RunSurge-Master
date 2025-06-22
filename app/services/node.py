@@ -28,14 +28,15 @@ class NodeService:
             self.logger.error(f"Error creating node: {e}")
             raise HTTPException(status_code=500, detail=str(e))
 
-    async def register_node(self, node: NodeRegisterGRPC):
+    async def register_node(self, node: NodeRegisterGRPC) -> Node:
         try:
             db_node = await self.create_node(node)
             #TODO: check if node is alive
             db_node.ip_address = node.ip_address
             db_node.port = node.port
             db_node.is_alive = True
-            return await self.node_repo.update(db_node)
+            await self.node_repo.update(db_node)
+            return db_node
         except Exception as e:
             print(traceback.format_exc())
             self.logger.debug(f"Error registering node: {e}")

@@ -27,6 +27,11 @@ class TaskStatus(str, Enum):
     completed = 'completed'
     failed = 'failed'
 
+class DataStatus(str, Enum):
+    pending = 'pending'
+    completed = 'completed'
+    failed = 'failed'
+
 class LogEventType(str, Enum):
     started = 'started'
     completed = 'completed'
@@ -118,6 +123,7 @@ class Data(Base):
     parent_task_id = Column(Integer, ForeignKey("task.task_id"), nullable=True)
     data_location = Column(SQLEnum(DataLocationType), default=DataLocationType.master)
     created_at = Column(DateTime, default=datetime.now)
+    status = Column(SQLEnum(DataStatus), default=DataStatus.pending)    
     
     # Relationships
     job = relationship("Job", back_populates="data_files")
@@ -140,6 +146,7 @@ class Task(Base):
     # Relationships
     job = relationship("Job", back_populates="tasks")
     node = relationship("Node", back_populates="tasks")
+    data_files = relationship("Data", back_populates="parent_task")
     data_dependencies = relationship("Data", secondary="task_data_dependency", back_populates="dependent_tasks")
     logs = relationship("NodeLog", back_populates="task")
     payment = relationship("Payment", back_populates="task", uselist=False)
