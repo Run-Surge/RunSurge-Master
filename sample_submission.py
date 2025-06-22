@@ -21,10 +21,10 @@ FILE_NAME = 'test.csv'  # Name of the file to read data from
 #! format aggregation = "type:list"
 #! each function must have an aggregation variable just before the return statement
 def add1(data):
-    header = data[0][0]
+    header = data[0]
     rows = data[1:]
     new_data = []
-    for row in data:
+    for row in rows:
         new_row = []
         for value in row:
             new_value = int(value) + 1  
