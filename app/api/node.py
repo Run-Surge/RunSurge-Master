@@ -9,15 +9,15 @@ from typing import List
 
 router = APIRouter()
 
-# @router.post("/", response_model=NodeRead)
-# async def register_node(
-#     node: NodeCreate, 
-#     session: AsyncSession = Depends(get_db),
-#     current_user: User = Depends(get_current_user)
-# ):
-#     node_service = get_node_service(session)
-#     created_node = await node_service.create_node(node, current_user["user_id"])
-#     return created_node
+@router.post("/", response_model=NodeRead)
+async def register_node(
+    node: NodeCreate, 
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    node_service = get_node_service(session)
+    created_node = await node_service.create_node(node, current_user["user_id"])
+    return created_node
 
 @router.get("/", response_model=List[NodeRead])
 async def get_nodes(

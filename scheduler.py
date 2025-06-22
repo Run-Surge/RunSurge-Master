@@ -876,8 +876,10 @@ async def generate_execution_plan(
     
     data_service = get_data_service(global_session)
     for var_name in all_initial_vars:
+        if var_name == "none":
+            continue
         print(f"  Creating DB record for initial input: '{var_name}'")
-        db_data_obj = await data_service.create_data(file_name=input_file, job_id=job_id, parent_task_id=-1)
+        db_data_obj = await data_service.create_data(file_name=var_name, job_id=job_id)
         var_to_data_id_map[var_name] = db_data_obj.data_id
         
     # --- Phase 2: Sequential Task/Data Creation and Script Generation ---
@@ -900,10 +902,13 @@ async def generate_execution_plan(
             
             print(f"\nCreating DB Task for Block {block_idx} on Node '{node_name}'")
             task_service = get_task_service(global_session)
+            print("HERE1111111111111111111111")
+
             created_task = await task_service.create_task(
                 job_id=job_id, data_ids=required_data_ids, required_ram=int(info["peak_memory"]), node_id=assigned_node_id
             )
             print(f"  -> Created Task with ID: {created_task.task_id}")
+            task_id = created_task.task_id
 
             master_plan.append(f"\n--- BLOCK {block_idx} (On {node_name}) ---")
             plan = node_plans[node_name]
@@ -933,10 +938,11 @@ async def generate_execution_plan(
                 output_var = get_lhs_var(stmt)
                 plan["python_code"].append(f"    print(f'EXECUTING: {stmt}')")
                 plan["python_code"].append(f"    {stmt}")
-                
                 if output_var not in var_to_data_id_map:
                     output_filename = f"{output_var}.csv"
-                    db_data_obj = await data_service.create_data(file_name=output_filename, job_id=job_id, parent_task_id=created_task.task_id)
+                    print("YASTAAAAAAAA")
+                    print(task_id)
+                    db_data_obj = await data_service.create_data(file_name=output_filename, job_id=job_id, parent_task_id=task_id)
                     var_to_data_id_map[output_var] = db_data_obj.data_id
 
                 if output_var in var_consumers:
@@ -944,6 +950,7 @@ async def generate_execution_plan(
                     plan["python_code"].append(f"    with open('{output_filename}', 'w', newline='') as f: csv.writer(f).writerows({output_var})")
                     plan["python_code"].append(f"    send_data('{output_var}', '{output_filename}', consumers={list(var_consumers[output_var])})")
             master_plan.append(f"  - {node_name} executes {len(info['statements'])} statement(s).")
+            print("HERE2222222222222222222222")
             
         else: # CASE B: The block is unschedulable
             if not info["statements"]: continue

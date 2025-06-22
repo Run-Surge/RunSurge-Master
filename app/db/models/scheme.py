@@ -55,9 +55,10 @@ class User(Base):
 # ram is in bytes, cpu_cores is in cores
 class Node(Base):
     __tablename__ = "node"
-    
+
     node_id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("user.user_id"))
+    node_name = Column(String, default=str(uuid.uuid4()))
     ram = Column(Integer)
     ip_address = Column(String, nullable=False)
     port = Column(Integer, default=DEFAULT_PORT)
@@ -69,7 +70,6 @@ class Node(Base):
     heartbeat = relationship("NodeHeartbeat", back_populates="node", uselist=False)
     resources = relationship("NodeResources", back_populates="node", uselist=False)
     tasks = relationship("Task", back_populates="node")
-    provided_data = relationship("Data", back_populates="provider_node")
     logs = relationship("NodeLog", back_populates="node")
     payments = relationship("Payment", back_populates="node")
     user = relationship("User", back_populates="nodes")
@@ -108,13 +108,14 @@ class Data(Base):
     data_id = Column(Integer, primary_key=True, autoincrement=True)
     file_name = Column(String)
     job_id = Column(Integer, ForeignKey("job.job_id"))
-    provider_id = Column(Integer, ForeignKey("node.node_id"), nullable=True)
+    parent_task_id = Column(Integer, ForeignKey("task.task_id"), nullable=True)
     data_location = Column(SQLEnum(DataLocationType), default=DataLocationType.master)
     created_at = Column(DateTime, default=datetime.now)
+    
     # Relationships
     job = relationship("Job", back_populates="data_files")
-    provider_node = relationship("Node", back_populates="provided_data")
     dependent_tasks = relationship("Task", secondary="task_data_dependency", back_populates="data_dependencies")
+    parent_task = relationship("Task", back_populates="data_files")
 
 class Task(Base):
     __tablename__ = "task"
@@ -135,6 +136,8 @@ class Task(Base):
     data_dependencies = relationship("Data", secondary="task_data_dependency", back_populates="dependent_tasks")
     logs = relationship("NodeLog", back_populates="task")
     payment = relationship("Payment", back_populates="task", uselist=False)
+    data_files = relationship("Data", back_populates="parent_task")
+
 
 class TaskDataDependency(Base):
     __tablename__ = "task_data_dependency"
