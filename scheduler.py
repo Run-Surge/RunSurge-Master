@@ -13,10 +13,10 @@ from app.services.task import get_task_service
 from app.services.data import get_data_service
 from app.services.node import get_node_service
 from app.services.job import get_job_service
-from app.db.session import  get_db_context
+from app.db.session import  get_db_context, init_db
 from app.db.models.scheme import JobStatus
 import asyncio
-global_session = None
+from sqlalchemy.ext.asyncio import AsyncSession
 input_file = "123456.csv"
 
 # ==============================================================================
@@ -816,7 +816,8 @@ async def generate_execution_plan(
     live_vars_data,
     func_footprints_data,
     input_header,
-    input_data_rows
+    input_data_rows,
+    session: AsyncSession  # <-- NEW ARGUMENT for database session
 ):
     """
     Generates all artifacts for a job inside the specified job directory.
@@ -850,7 +851,7 @@ async def generate_execution_plan(
     # --- Phase 1: Create Initial Input Data Records ---
     print("\n--- Creating Initial Data Records ---")
     all_initial_vars = {key.split(":")[0] for block in consolidated_schedule_info for key in block.get("key", []) if key.endswith(":none") and key.split(":")[0] != "none"}
-    data_service = get_data_service(global_session)
+    data_service = get_data_service(session)
     for var_name in all_initial_vars:
         print(f"  Creating DB record for initial input: '{var_name}'")
         # Correctly pass the main input filename to the DB record
@@ -873,7 +874,7 @@ async def generate_execution_plan(
             required_data_ids = list(set([var_to_data_id_map[key.split(":")[0]] for key in valid_keys if key.split(":")[0] in var_to_data_id_map]))
             
             print(f"\nCreating DB Task for Block {block_idx} on Node '{node_name}'")
-            task_service = get_task_service(global_session)
+            task_service = get_task_service(session)
             created_task = await task_service.create_task(job_id=job_id, data_ids=required_data_ids, required_ram=int(info["peak_memory"]), node_id=assigned_node_id)
             print(f"  -> Created Task with ID: {created_task.task_id}")
 
@@ -1086,12 +1087,12 @@ if __name__ == "__main__":
 
     except IOError as e:
         print(f"Error writing execution plan files: {e}")
-        
+
 # ==============================================================================
 # 6. MAIN EXECUTION BLOCK
 # ==============================================================================
-async def scheduler(job_id: int):
-        node_service = get_node_service(global_session)
+async def scheduler(job_id: int, session: AsyncSession):
+        node_service = get_node_service(session)
         nodes = await node_service.get_all_nodes()
         nodes_data, node_map = convert_nodes_into_Json(nodes)
         job_dir = os.path.join(JOBS_DIRECTORY_PATH, str(job_id))
@@ -1171,7 +1172,8 @@ async def scheduler(job_id: int):
             live_vars_data=live_vars_data,
             func_footprints_data=func_footprints_data,
             input_header=input_header,
-            input_data_rows=input_data_rows
+            input_data_rows=input_data_rows,
+            session=session
         )
 
         # --- FINAL OUTPUTS (for debugging) ---
@@ -1193,10 +1195,9 @@ async def scheduler(job_id: int):
         print("Executable node scripts and master plan have been generated.")
 
 async def main():
-    global global_session
+    await init_db()
     while True:
         async with get_db_context() as session:
-            global_session = session
             try:
                 job_service = get_job_service(session)
                 jobs = await job_service.get_jobs_not_scheduled()
@@ -1205,7 +1206,7 @@ async def main():
                 for job in jobs:
                     ## update job status to running after scheduler is done
                     await job_service.update_job_status(job.job_id, JobStatus.running)
-                    await scheduler(job.job_id)
+                    await scheduler(job.job_id, session)
             except Exception as e:
                 print(f"Error: {e}")
             await asyncio.sleep(10)
