@@ -821,7 +821,7 @@ def sanitize_statement_for_filename(statement: str) -> str:
 # ==============================================================================
 async def generate_execution_plan(
     job_id: int,
-    node_map: dict, # Pass in the map of {node_name: node_id}
+    node_map: dict,
     consolidated_schedule_info,
     parallelization_plan,
     nodes_data,
@@ -831,144 +831,202 @@ async def generate_execution_plan(
     input_data_rows
 ):
     """
-    Generates a master schedule, executable scripts, AND creates data/task
-    records in the database.
+    Generates a master schedule, executable scripts, AND creates data/task records in the database.
+    CORRECTED: Fixes NameError and logical flaws in parallel task argument handling.
     """
-    print("\n--- Generating Final Execution Plan (DB Integration & Scripting) ---")
+    print("\n--- Generating Final Execution Plan (Sequential DB & CSV Output) ---")
+
     # --- Phase 0: Setup ---
     if not nodes_data:
         return
 
     get_lhs_var = lambda s: s.split("=")[0].strip()
     
-    # This map is crucial for finding the provider node ID for intermediate data
     block_to_node_map = {
         info["consolidated_block_index"]: info["assigned_node"]["name"]
         for info in consolidated_schedule_info
         if info["is_schedulable"]
     }
     
-    # This dictionary will store all created data objects from the DB,
-    # mapping the variable name to the data object (which includes the ID).
-    db_data_map = {}
-
-    # --- DB PASS 1: Identify and create all data records ---
-    print("\n--- DB Pass 1: Creating Data Records ---")
+    var_consumers = {}
     for info in consolidated_schedule_info:
-        if not info["is_schedulable"]:
-            continue
+        valid_keys = [k for k in info.get("key", []) if k != "none:none"]
+        for key in valid_keys:
+            var, source_idx_str = key.split(":")
+            if source_idx_str.isdigit():
+                source_idx_0_based = int(source_idx_str) - 1
+                producer_block = next((p for p in consolidated_schedule_info if p["consolidated_block_index"] == source_idx_0_based), None)
+                if producer_block:
+                    produced_var = get_lhs_var(producer_block["statements"][-1]) if producer_block["is_schedulable"] else get_lhs_var(producer_block["statements"][0])
+                    if produced_var not in var_consumers:
+                        var_consumers[produced_var] = set()
+                    consuming_node = block_to_node_map.get(info["consolidated_block_index"])
+                    if consuming_node:
+                        var_consumers[produced_var].add(consuming_node)
 
-        # 1a. Identify initial inputs for this block (dependencies on "none")
-        for key in info.get("key", []):
-            if key == "none:none":
-                continue
-            if key.endswith(":none"):
-
-                var_name = key.split(":")[0]
-                # Only create if we haven't seen this initial input before
-                if var_name not in db_data_map:
-                    print(f"  Creating DB record for initial input: '{var_name}' (file: {input_file})")
-                    # The main program's input file is considered the provider with ID -1
-                    data_service = get_data_service(global_session)
-                    db_data_obj = await data_service.create_data(file_name=input_file, job_id=job_id, provider_id=-1)
-                    print("HERE55555555555555555",db_data_obj.data_id)
-                    db_data_map[var_name] = db_data_obj.data_id
-
-        # # 1b. Identify intermediate outputs produced by this block
-        # for stmt in info["statements"]:
-        #     output_var = get_lhs_var(stmt)
-        #     # Only create if this output variable hasn't been defined yet
-        #     if output_var not in db_data_map:
-        #         producer_node_name = info["assigned_node"]["name"]
-        #         producer_node_id = node_map.get(producer_node_name)
-        #         print(f"  Creating DB record for intermediate output: '{output_var}' (provider: {producer_node_name} ID: {producer_node_id})")
-                
-        #         # The filename for an intermediate output is just its variable name for now
-        #         db_data_obj = await data_service.create_data(file_name=output_var, job_id=job_id, provider_id=producer_node_id)
-        #         db_data_map[output_var] = db_data_obj.data_id
-
-    # --- DB PASS 2: Create Tasks & Generate Scripts ---
-    print("\n--- DB Pass 2: Creating Task Records & Generating Scripts ---")
+    produced_by_scheduled_blocks = {
+        get_lhs_var(stmt) for info in consolidated_schedule_info if info["is_schedulable"] for stmt in info["statements"]
+    }
     
-    # Setup for script generation
-    AGGREGATOR_NAME = "AGGREGATOR_SERVICE"
-    WORKER_NODES = [node["name"] for node in nodes_data]
+    var_to_data_id_map = {}
+
+    # --- Phase 1: Create Initial Input Data Records ---
+    print("\n--- Creating Initial Data Records ---")
+    all_initial_vars = {key.split(":")[0] for block in consolidated_schedule_info for key in block.get("key", []) if key.endswith(":none")}
+    
+    data_service = get_data_service(global_session)
+    for var_name in all_initial_vars:
+        print(f"  Creating DB record for initial input: '{var_name}'")
+        db_data_obj = await data_service.create_data(file_name=input_file, job_id=job_id, parent_task_id=-1)
+        var_to_data_id_map[var_name] = db_data_obj.data_id
+        
+    # --- Phase 2: Sequential Task/Data Creation and Script Generation ---
+    print("\n--- Creating Tasks, Output Data, and Generating Scripts ---")
+    
     node_plans = {node["name"]: {"initial_data": {}, "python_code": []} for node in nodes_data}
     master_plan = ["# Master Execution Schedule\n"]
-    print("HERE2222222222")
     function_definitions = build_function_definitions(func_footprints_data)
-    print("HERE111111111111111111111111111")
     
     for info in consolidated_schedule_info:
         block_idx = info["consolidated_block_index"]
+        valid_keys = [k for k in info.get("key", []) if k != "none:none"]
 
-        # --- CASE A: The block is schedulable on a worker node ---
         if info["is_schedulable"]:
             node_name = info["assigned_node"]["name"]
             assigned_node_id = node_map.get(node_name)
-            # --- DB Task Creation ---
             
-            required_data_ids = []
-            for key in info.get("key", []):
-                var_name = key.split(":")[0]
-                if var_name != "none" and var_name in db_data_map:
-                    print("var_name",var_name)
-                    print("manga",db_data_map[var_name])
-                    required_data_ids.append(db_data_map[var_name])
-                    print("HERE444444444444444444")
-            
-            # Remove duplicates that might arise from multiple statements needing the same input
+            required_data_ids = [var_to_data_id_map[key.split(":")[0]] for key in valid_keys if key.split(":")[0] in var_to_data_id_map]
             required_data_ids = list(set(required_data_ids))
-            print(f"\nCreating DB Task for Block {block_idx} on Node '{node_name}' (ID: {assigned_node_id})")
-            print(f"  Inputs require Data IDs: {required_data_ids}")
+            
+            print(f"\nCreating DB Task for Block {block_idx} on Node '{node_name}'")
             task_service = get_task_service(global_session)
-            print("HERE333333333333333333333333333")
-            print("required_data_ids",required_data_ids)
-            print("job_id",job_id)
-            print("assigned_node_id",assigned_node_id)
-            await task_service.create_task(
-                job_id=job_id,
-                data_ids=required_data_ids,
-                required_ram=int(info["peak_memory"]), # Ensure RAM is int
-                node_id=assigned_node_id
+            created_task = await task_service.create_task(
+                job_id=job_id, data_ids=required_data_ids, required_ram=int(info["peak_memory"]), node_id=assigned_node_id
             )
+            print(f"  -> Created Task with ID: {created_task.task_id}")
 
-            # --- Script Generation (Code is the same as before) ---
             master_plan.append(f"\n--- BLOCK {block_idx} (On {node_name}) ---")
             plan = node_plans[node_name]
             plan["python_code"].append(f"\n    # --- Task: Execute Block {block_idx} ---")
-            valid_keys = [k for k in info.get("key", []) if k != "none:none"]
+
+            initial_vars_for_block = {key.split(":")[0] for key in valid_keys if key.endswith(":none")}
+            if initial_vars_for_block and input_header is not None and input_data_rows is not None:
+                block_input_filename = f"block_{block_idx}_input_for_{node_name}.csv"
+                print(f"  -> This node will receive initial data in '{block_input_filename}'")
+                with open(block_input_filename, 'w', newline='') as f:
+                    csv.writer(f).writerows([input_header] + input_data_rows)
+                
+                plan['initial_data']['primary_input'] = block_input_filename
+                plan["python_code"].append(f"    print('--- Loading initial data from {block_input_filename} ---')")
+                plan["python_code"].append(f"    with open(initial_data['primary_input'], 'r', newline='') as f: primary_data = list(csv.reader(f))")
+                for var in initial_vars_for_block:
+                    plan["python_code"].append(f"    {var} = primary_data")
+
             for key in valid_keys:
                 var, source_idx_str = key.split(":")
                 if source_idx_str.isdigit():
-                    source_idx_0_based = int(source_idx_str) - 1
-                    source_node = block_to_node_map.get(source_idx_0_based, AGGREGATOR_NAME)
-                    plan["python_code"].append(f"    print('--- Loading dependency ---')")
+                    source_node = block_to_node_map.get(int(source_idx_str) - 1, "AGGREGATOR_SERVICE")
+                    plan["python_code"].append(f"    print('--- Loading dependency: {var} from {source_node} ---')")
                     plan["python_code"].append(f"    {var} = wait_for_data('{var}', from_node='{source_node}')")
-                elif source_idx_str == "none" and info["statements"]:
-                    stmt = info["statements"][0]
-                    var_info = live_vars_data.get(stmt, {}).get(var)
-                    plan["initial_data"][var] = var_info
-                    plan["python_code"].append(f"    print('--- Loading initial data ---')")
-                    plan["python_code"].append(f"    {var} = initial_data['{var}']")
 
             for stmt in info["statements"]:
                 output_var = get_lhs_var(stmt)
                 plan["python_code"].append(f"    print(f'EXECUTING: {stmt}')")
                 plan["python_code"].append(f"    {stmt}")
-            master_plan.append(f"  - {node_name} executes {len(info['statements'])} statement(s).")
+                
+                if output_var not in var_to_data_id_map:
+                    output_filename = f"{output_var}.csv"
+                    db_data_obj = await data_service.create_data(file_name=output_filename, job_id=job_id, parent_task_id=created_task.task_id)
+                    var_to_data_id_map[output_var] = db_data_obj.data_id
 
-        # --- CASE B: The block is unschedulable ---
-        else:
-            if info["statements"]:
-                statement = info["statements"][0]
-                plan_result = parallelization_plan.get(statement, {})
+                if output_var in var_consumers:
+                    output_filename = f"{output_var}.csv"
+                    plan["python_code"].append(f"    with open('{output_filename}', 'w', newline='') as f: csv.writer(f).writerows({output_var})")
+                    plan["python_code"].append(f"    send_data('{output_var}', '{output_filename}', consumers={list(var_consumers[output_var])})")
+            master_plan.append(f"  - {node_name} executes {len(info['statements'])} statement(s).")
+            
+        else: # CASE B: The block is unschedulable
+            if not info["statements"]: continue
+            statement = info["statements"][0]
+            plan_result = parallelization_plan.get(statement, {})
+            
+            if not plan_result or plan_result.get("status") != "Success":
                 status = plan_result.get("status", "Unplanned")
-                print(f"\nSkipping DB creation for unschedulable block: '{statement}' (Status: {status})")
-                # All script/file generation for parallel/deferred tasks happens here as before
-                # (This logic is left as-is, since you specified to ignore level 3 for DB integration)
-                # ... (Place existing logic for handling parallelization_plan here)
-                # ...
+                master_plan.append(f"\n--- Task '{statement}' (UNPLANNED) ---")
+                master_plan.append(f"  - Status: {status}")
+            else:
+                if input_header is None or input_data_rows is None:
+                    master_plan.append(f"\n--- Task '{statement}' (UNPLANNED) ---")
+                    master_plan.append(f"  - Status: Failed - Missing primary input data for splitting.")
+                    continue
+                
+                master_plan.append(f"\n--- Task '{statement}' (PARALLEL) ---")
+                output_var = get_lhs_var(statement)
+                arg_names_match = re.match(r".*?\((.*)\)", statement)
+                arg_names = [arg.strip() for arg in arg_names_match.groups()[0].split(',') if arg.strip()] if arg_names_match else []
+                func_name_match = re.search(r"=\s*([\w.]+)\(", statement)
+                func_name = func_name_match.groups()[0] if func_name_match else "unknown_function"
+                parallel_arg_name = next(iter(plan_result.get('chunks', {})), None)
+                
+                if not parallel_arg_name:
+                    master_plan.append(f"  - Status: Failed - No chunkable argument in plan.")
+                    continue
+
+                master_plan.append(f"  - Aggregator: AGGREGATOR_SERVICE")
+                worker_chunk_assignments = {}
+                all_chunk_ids, WORKER_NODES = list(range(plan_result.get("parallelization_factor", 0))), [node["name"] for node in nodes_data]
+                for i, chunk_id in enumerate(all_chunk_ids):
+                    worker_name = WORKER_NODES[i % len(WORKER_NODES)]
+                    worker_chunk_assignments.setdefault(worker_name, []).append(chunk_id)
+
+                for worker_name, assigned_chunks in worker_chunk_assignments.items():
+                    worker_plan = node_plans[worker_name]
+                    worker_plan["python_code"].append(f"\n    # --- PARALLEL TASK for '{statement}' ---")
+
+                    for chunk_id in assigned_chunks:
+                        chunk_info = plan_result['chunks'][parallel_arg_name][chunk_id]
+                        start, end = chunk_info['start_index'], chunk_info['end_index']
+                        chunk_data = [input_header] + input_data_rows[start:end]
+                        chunk_filename = f"{parallel_arg_name}_chunk_{chunk_id}_for_{worker_name}.csv"
+                        
+                        with open(chunk_filename, 'w', newline='') as f: csv.writer(f).writerows(chunk_data)
+                        master_plan.append(f"  - Worker {worker_name} assigned data chunk: {chunk_filename}")
+                            
+                        chunk_key = f"chunk_file_{sanitize_statement_for_filename(statement)}_{chunk_id}"
+                        worker_plan['initial_data'][chunk_key] = chunk_filename
+                        
+                        worker_plan['python_code'].append(f"\n    # -- Sub-Task for Chunk {chunk_id} --")
+                        worker_plan['python_code'].append(f"    with open(initial_data['{chunk_key}'], 'r', newline='') as f: {parallel_arg_name}_chunk_data = list(csv.reader(f))")
+                        
+                        # --- THIS IS THE CORRECTED AND REWRITTEN ARGUMENT HANDLING LOGIC ---
+                        args_for_call = {}
+                        for arg in arg_names:
+                            if arg == parallel_arg_name:
+                                args_for_call[arg] = f"{parallel_arg_name}_chunk_data"
+                            elif arg not in produced_by_scheduled_blocks:
+                                print(f"  -> Parallel task needs primary input '{arg}'. Adding to manifest.")
+                                worker_plan["initial_data"][arg] = live_vars_data.get(statement, {}).get(arg, f"MISSING_DATA_FOR_{arg}")
+                                worker_plan["python_code"].append(f"    {arg} = initial_data.get('{arg}')")
+                                args_for_call[arg] = arg
+                            else: # Argument is an intermediate result from a previous block
+                                producer_node = "UNKNOWN"
+                                for k in valid_keys:
+                                    if k.startswith(arg + ":"):
+                                        producer_node = block_to_node_map.get(int(k.split(":")[1]) - 1, "AGGREGATOR_SERVICE")
+                                        break
+                                worker_plan["python_code"].append(f"    {arg} = wait_for_data('{arg}', from_node='{producer_node}')")
+                                args_for_call[arg] = arg
+                        
+                        call_str = ", ".join([f"{k}={v}" for k, v in args_for_call.items()])
+                        worker_plan['python_code'].append(f"    partial_result_{chunk_id} = {func_name}({call_str})")
+                        worker_plan['python_code'].append(f"    send_data('partial_result_for_{output_var}', partial_result_{chunk_id}, consumers=['AGGREGATOR_SERVICE'])")
+
+                for worker_name in worker_chunk_assignments.keys():
+                    node_plans[worker_name]["python_code"].extend([
+                        f"\n    # --- SYNCHRONIZATION BARRIER ---",
+                        f"    {output_var} = wait_for_data('{output_var}', from_node='AGGREGATOR_SERVICE')"
+                    ])
+                master_plan.append(f"  - All workers ({', '.join(worker_chunk_assignments.keys())}) will WAIT for final result '{output_var}'.")
 
     # --- Phase 3: Write all generated files ---
     print("\n--- Phase 3: Writing Execution Files ---")
@@ -988,24 +1046,17 @@ def send_data(variable_name, data, consumers):
     time.sleep(0.5)
     print(f"<-- [SENT] '{variable_name}'.")
 """
-
     all_functions_source = "\n\n".join(function_definitions.values())
 
     try:
-        with open("master_schedule.txt", "w") as f:
-            f.write("\n".join(master_plan))
+        with open("master_schedule.txt", "w") as f: f.write("\n".join(master_plan))
         print("Master schedule written to master_schedule.txt")
-
         for node_name, plan_details in node_plans.items():
-            if not plan_details["python_code"]:
-                continue
-
-            with open(f"{node_name}_data.json", "w") as f:
-                json.dump(plan_details["initial_data"], f, indent=4)
+            if not plan_details["python_code"]: continue
+            with open(f"{node_name}_data.json", "w") as f: json.dump(plan_details["initial_data"], f, indent=4)
             print(f"Initial data for {node_name} written to {node_name}_data.json")
-
+            
             scheduled_tasks_code = "\n".join(plan_details["python_code"])
-
             main_logic = f"""
 def main(node_name):
     print(f"\\n*** Starting execution on {{node_name}} ***\\n")
@@ -1026,23 +1077,15 @@ if __name__ == "__main__":
     main("{node_name}")
 """
             full_python_code = (
-                python_harness_preamble
-                + "\n\n# ==================================================\n"
-                + "#          RECONSTRUCTED FUNCTION DEFINITIONS          \n"
-                + "# ==================================================\n\n"
-                + all_functions_source
-                + "\n\n# ==================================================\n"
-                + "#               MAIN EXECUTION LOGIC                 \n"
-                + "# ==================================================\n"
-                + main_logic
+                python_harness_preamble +
+                "\n\n# RECONSTRUCTED FUNCTION DEFINITIONS\n" + all_functions_source +
+                "\n\n# MAIN EXECUTION LOGIC\n" + main_logic
             )
-
-            with open(f"{node_name}.py", "w") as f:
-                f.write(full_python_code)
+            with open(f"{node_name}.py", "w") as f: f.write(full_python_code)
             print(f"Executable script for {node_name} written to {node_name}.py")
-
     except IOError as e:
         print(f"Error writing execution plan files: {e}")
+        
 # ==============================================================================
 # 6. MAIN EXECUTION BLOCK
 # ==============================================================================
