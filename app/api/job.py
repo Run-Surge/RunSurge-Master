@@ -2,34 +2,38 @@ from fastapi import Depends, HTTPException, APIRouter, Form
 import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from app.db.repositories.job import JobRepository, get_job_repository
-from app.schemas.job import JobRead, JobCreate
+from app.schemas.job import JobRead
 from app.db.session import get_db
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.services.job import get_job_service
-from typing import Optional
 from fastapi import UploadFile, File
-from app.core.security import get_current_user
-from app.db.models.scheme import User
+from app.core.security import get_current_user_from_cookie
+from app.db.models.scheme import User, JobType
 from app.utils.constants import JOBS_DIRECTORY_PATH
 from Parallelization.Parallelizer import Parallelizer
-import logging
 router = APIRouter()
 
 @router.post("/", response_model=JobRead)
 async def create_job(
+    job_name: str = Form(...),
+    job_type: JobType = Form(...),
     file: UploadFile = File(...),
     session: AsyncSession = Depends(get_db), 
-    current_user: User = Depends(get_current_user)
+    current_user = Depends(get_current_user_from_cookie)
 ):
     job_service = get_job_service(session)
     job = await job_service.create_job_with_script(
         user_id=current_user["user_id"],
         file=file,
+        job_name=job_name,
+        job_type=job_type
     )
-    path_name=f"{JOBS_DIRECTORY_PATH}/{job.job_id}/{job.script_name}.py"
-    Parallelizer(path_name,job.job_id)
-    print("finished parallelization")
+    try:
+        Parallelizer(job.script_path,job.job_id)
+        print("finished parallelization")
+    except Exception as e:
+        print(e)
+        raise HTTPException(status_code=500, detail=str(e))
     return job
 
 

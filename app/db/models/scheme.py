@@ -38,6 +38,10 @@ class PaymentStatus(str, Enum):
     completed = 'completed'
     failed = 'failed'
 
+class JobType(str, Enum):
+    simple = 'simple'
+    complex = 'complex'     
+
 class User(Base):
     __tablename__ = "user"
     
@@ -92,9 +96,12 @@ class Job(Base):
     
     job_id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("user.user_id"))
+    job_name = Column(String)
+    job_type = Column(SQLEnum(JobType))
     status = Column(SQLEnum(JobStatus), default=JobStatus.pending)
     created_at = Column(DateTime, default=datetime.now)
-    script_name = Column(String, nullable=True)
+    script_name = Column(String)
+    script_path = Column(String, nullable=True)
     
     # Relationships
     user = relationship("User", back_populates="jobs")

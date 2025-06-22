@@ -8,7 +8,7 @@ from app.utils.utils import Create_directory, save_file
 import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.utils.constants import JOBS_DIRECTORY_PATH, FILE_SIZE_LIMIT
-from app.db.models.scheme import JobStatus
+from app.db.models.scheme import JobStatus, JobType
 
 class JobService:
     def __init__(self, job_repo: JobRepository):
@@ -27,18 +27,24 @@ class JobService:
         self, 
         user_id: int,
         file: UploadFile,
+        job_name: str,
+        job_type: JobType
     ):
-        self.validate_file(file)
-        job_data = JobCreate(
-            user_id=user_id
-        )
-        job = await self.job_repo.create_job(job_data)        
-        Create_directory(f"{JOBS_DIRECTORY_PATH}/{job.job_id}")
-        random_name = str(uuid.uuid4())
-        save_file(file, f"{JOBS_DIRECTORY_PATH}/{job.job_id}/{random_name}.py")
-        await self.job_repo.update_job_script_name(job.job_id, random_name)
-        return job
-
+        try:
+            self.validate_file(file)
+            job_data = JobCreate(
+                job_name=job_name,
+                job_type=job_type,
+                script_name=file.filename.split(".")[0]
+            )
+            job = await self.job_repo.create_job(job_data, user_id)        
+            Create_directory(f"{JOBS_DIRECTORY_PATH}/{job.job_id}")
+            random_name = str(uuid.uuid4())
+            save_file(file, f"{JOBS_DIRECTORY_PATH}/{job.job_id}/{random_name}.py")
+            await self.job_repo.update_job_script_path(job.job_id, f"{JOBS_DIRECTORY_PATH}/{job.job_id}/{random_name}.py")
+            return job
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
     async def get_job(self, job_id: int):
         return await self.job_repo.get_job(job_id)
 

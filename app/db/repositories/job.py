@@ -11,9 +11,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 class JobRepository(BaseRepository[Job]):
     def __init__(self, session: AsyncSession):
         super().__init__(session, Job)
-    async def create_job(self, job_data: JobCreate) -> Job:
+    async def create_job(self, job_data: JobCreate, user_id: int) -> Job:
         job = Job(
-            user_id=job_data.user_id,
+            user_id=user_id,
+            job_name=job_data.job_name,
+            job_type=job_data.job_type,
+            script_name=job_data.script_name
         )
         
         return await self.create(job)
@@ -30,10 +33,10 @@ class JobRepository(BaseRepository[Job]):
             await self.session.commit()
             await self.session.refresh(job)
         return job
-    async def update_job_script_name(self, job_id: int, script_name: str) -> Optional[Job]:
+    async def update_job_script_path(self, job_id: int, script_path: str) -> Optional[Job]:
         job = await self.get_by_id(job_id)
         if job:
-            job.script_name = script_name
+            job.script_path = script_path
             await self.session.commit()
             await self.session.refresh(job)
         return job
