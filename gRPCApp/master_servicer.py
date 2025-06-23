@@ -37,7 +37,8 @@ class MasterServicer(master_pb2_grpc.MasterServiceServicer):
                                                       ))
 
                 node_service = get_node_service(session)
-                ip, port = parse_grpc_peer_address(context.peer()) # port here is request port, not server port
+                ip, port = parse_grpc_peer_address(context.peer())
+                print('ip, port are ', ip, request.port)
                 node = await node_service.register_node(NodeRegisterGRPC(
                     user_id=user.user_id,
                     machine_fingerprint=request.machine_fingerprint,

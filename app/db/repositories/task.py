@@ -1,4 +1,4 @@
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import select
 from app.db.models.scheme import Task, Data, Node, TaskDataDependency
 from app.schemas.task import TaskCreate, TaskUpdate, TaskDataWithNodeInfo, TaskOutputDependentInfo
@@ -83,6 +83,14 @@ class TaskRepository(BaseRepository[Task]):
             )
             for row in rows
         ]
+
+    async def get_task_with_data_files(self, task_id: int):
+        print('wowwy')
+        query = (select(Task, Data).options(joinedload(Task.data_files)).where(
+            Task.task_id == task_id
+        ))
+        result = await self.session.execute(query)
+        return result.scalar()
 
 async def get_task_repository(session: AsyncSession = Depends(get_db)) -> TaskRepository:
     return TaskRepository(session)

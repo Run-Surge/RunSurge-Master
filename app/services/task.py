@@ -6,6 +6,7 @@ from typing import List
 import logging
 from protos import master_pb2, worker_pb2
 from app.services.worker_client import WorkerClient
+import traceback
 
 ### Tasks are created internally, not using endpoints
 
@@ -77,7 +78,7 @@ class TaskService:
 
     async def complete_task(self, completion_info: master_pb2.TaskCompleteRequest) -> bool:
         try:
-            task = await self.task_repo.get_by_id(completion_info.task_id)
+            task = await self.task_repo.get_task_with_data_files(completion_info.task_id)
             if not task:
                 logging.error(f"Task not found: {completion_info.task_id}")
                 return False
@@ -88,6 +89,7 @@ class TaskService:
             #TODO: if job completed, get output data and aggregate them into a single file
             return True
         except Exception as e:
+            print(traceback.format_exc())
             logging.error(f"Error completing task: {e}")
             return False
 
