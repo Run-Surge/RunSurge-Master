@@ -138,6 +138,25 @@ def dependency_analyzer(folder):
 
         print(f"\nProcessing pair: {os.path.basename(jsons[i])}, {os.path.basename(jsons[i+1])}")
         result = group_by_needs_with_wait_index(nodes, edges)
+        for entry in result:
+            keys = entry["key"]
+            statements = entry["statements"]
+
+            # Check if 'data:' is already present in keys
+            has_data_key = any(k.startswith("data:") for k in keys)
+
+            # Check if 'data' is used in function arguments
+            data_in_args = any(re.search(r'\b\w+\s*\(.*\bdata\b.*\)', stmt) for stmt in statements)
+
+            # Case 1: Only ["none:none"] → replace with ["data:none"]
+            keys = list(keys) 
+            if keys == ["none:none"]:
+                entry["key"] = ["data:none"]
+
+            # Case 2: 'data' used in args but not in keys → add 'data:none'
+            elif data_in_args and not has_data_key:
+                keys.append("data:none")
+                entry["key"] = sorted(set(keys))
    
         index = int(re.search(r'\d+', os.path.basename(jsons[i])).group(0))
         print("DEBUGGIN ",f"{SAVE_PATH}/main_lists.json")
