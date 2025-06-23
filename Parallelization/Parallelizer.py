@@ -175,7 +175,7 @@ def dependency_analyzer(folder):
         results.append(result)
     return results
 
-def get_memory_foortprint(file_path, entry_point, functions,job_id):
+def get_memory_foortprint(file_path, entry_point, functions,job_id,input_data_id):
     global SAVE_PATH
     def get_file_name(tree):
         file_name = None
@@ -185,7 +185,7 @@ def get_memory_foortprint(file_path, entry_point, functions,job_id):
                     if isinstance(target, ast.Name) and target.id == 'FILE_NAME':
                         if isinstance(node.value, ast.Constant):
                             file_name = node.value.value
-        file_name=f"{JOBS_DIRECTORY_PATH}/{job_id}/123456.csv"
+        file_name=f"{JOBS_DIRECTORY_PATH}/{job_id}/{input_data_id}.csv"
 
         return file_name
     def get_read_file_block(tree):
@@ -412,7 +412,7 @@ def get_memory_foortprint(file_path, entry_point, functions,job_id):
     del memory_parser.vars['lines']  
     get_main_footprint(entry_point, functions, memory_parser)
     # print(memory_parser.vars)
-def Parallelizer(path,job_id):
+def Parallelizer(path,job_id,input_data_id):
     global SAVE_PATH
     SAVE_PATH = f"Jobs/{job_id}"
     print(f"Parallelizing {path}")
@@ -447,5 +447,5 @@ def Parallelizer(path,job_id):
     if dep_2d_list:
         print(f"3. Dependency analysis completed for {filename}.")
     
-    get_memory_foortprint(filename,entry_point,functions,job_id)
+    get_memory_foortprint(filename,entry_point,functions,job_id,input_data_id)
     print(f"4. Memory footprint analysis completed for {filename}.")
