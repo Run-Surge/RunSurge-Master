@@ -478,16 +478,14 @@ def consolidate_to_block_format(
             # This ensures the final result is always a plain, JSON-serializable dictionary.
             fitting_node_dict = dict(fitting_node_obj) if fitting_node_obj else None
 
-            consolidated_schedule_info.append(
-                {
-                    "consolidated_block_index": i,
-                    "peak_memory": peak_memory,
-                    "assigned_node": fitting_node_dict, # Use the serializable dictionary
-                    "is_schedulable": fitting_node_dict is not None,
-                    "key": block["key"],
-                    "statements": block["statements"],
-                }
-            )
+            consolidated_schedule_info.append({
+                "consolidated_block_index": i,
+                "peak_memory": peak_memory,
+                "assigned_node": fitting_node_dict, # Use the serializable dictionary
+                "is_schedulable": fitting_node_dict is not None,
+                "key": block["key"],
+                "statements": block["statements"],
+            })
         else:
             consolidated_schedule_info.append(
                 {
@@ -841,16 +839,17 @@ async def generate_sequential_assignment(
     ip_address, port = node_address_map.get(node_name)
     
     output_data_infos = [] 
+    valid_keys = [k for k in info.get("key", []) if k != "none:none"]
     
-    required_data_ids = list(set([var_to_data_id_map.get(key.split(":")[0]) for key in info.get("key", []) if key.split(":")[0] in var_to_data_id_map]))
-    
+    required_data_ids = list(set([var_to_data_id_map.get(key.split(":")[0]) for key in valid_keys if key.split(":")[0] in var_to_data_id_map]))
+        
     task_service = get_task_service(session)
     created_task = await task_service.create_task(job_id=job_id, data_ids=required_data_ids, required_ram=int(info["peak_memory"]), node_id=assigned_node_id)
     print(f"\nCreated DB Task with ID: {created_task.task_id} for Sequential Block {block_idx} on Node '{node_name}'")
 
     task_python_code = [f"# --- Task {created_task.task_id} for Job {job_id} ---"]
 
-    for key in info.get("key", []):
+    for key in valid_keys:
         var, source_idx_str = key.split(":")
         if source_idx_str == 'none':
             task_python_code.append(f"    {var} = wait_for_data('{input_file}', '{job_id}')")
@@ -882,7 +881,7 @@ async def generate_sequential_assignment(
     task_script_name = f"task_{created_task.task_id}_script.py"
     
     python_harness_preamble = f"""
-import time, csv, os, sys, json, asyncio
+import time, csv, os, sys, json
 JOB_ID = "{job_id}"
 JOBS_DIRECTORY_PATH = "{JOBS_DIRECTORY_PATH}"
 NODE_IP = "{ip_address}"
@@ -909,22 +908,28 @@ def wait_for_data(file_name, job_id_str):
         print(f"[ERROR] Failed to load file '{{file_name}}': {{e}}")
         return None
 
-async def send_data(variable_name, file_name, data_id, consumers):
+def send_data(variable_name, file_name, data_id, consumers):
     print(f"--> [SEND] Notifying {{len(consumers)}} consumers that '{{variable_name}}' is ready.")
 """
     
     joined_task_code = "\n".join(task_python_code)
     task_main_logic = f"""
-async def main():
+def main():
 {joined_task_code}
 
 if __name__ == "__main__":
     print(f"\\n*** Starting Task {created_task.task_id} for Job {job_id} ***\\n")
-    asyncio.run(main())
+    main()
     print(f"\\n*** Task {created_task.task_id} complete. ***\\n")
 """
     full_task_script_content = (python_harness_preamble + "\n\n" + all_functions_source + "\n\n" + task_main_logic)
     script_content_bytes = full_task_script_content.encode('utf-8')
+
+    script_filepath = os.path.join(job_dir, task_script_name)
+    with open(script_filepath, "w") as f:
+        f.write(full_task_script_content)
+    print(f"  -> Generated script '{task_script_name}'")
+    
     
     task_assignment_message = worker_pb2.TaskAssignment(
         task_id=created_task.task_id, python_file=script_content_bytes,
@@ -937,7 +942,7 @@ if __name__ == "__main__":
 
     if success:
         print(f"  -> Successfully assigned Task {created_task.task_id}.")
-        for key in info.get("key", []):
+        for key in valid_keys:
             if key.split(":")[1] == 'none':
                 var = key.split(":")[0]
                 notification = worker_pb2.DataNotification(
@@ -1116,6 +1121,7 @@ async def generate_execution_plan(
     if not nodes_data: return
     get_lhs_var = lambda s: s.split("=")[0].strip()
     node_address_map = {node["name"]: (node["ip_address"], node["port"]) for node in nodes_data}
+    block_to_node_map = { info["consolidated_block_index"]: info["assigned_node"]["name"] for info in consolidated_schedule_info if info["is_schedulable"] }
     var_consumers = {}
     for info in consolidated_schedule_info:
         valid_keys = [k for k in info.get("key", []) if k != "none:none"]
@@ -1132,6 +1138,7 @@ async def generate_execution_plan(
                             consuming_node_name = block_to_node_map.get(info["consolidated_block_index"])
                             if consuming_node_name: var_consumers[produced_var].add(consuming_node_name)
                             break
+    produced_by_scheduled_blocks = {get_lhs_var(stmt) for info in consolidated_schedule_info if info["is_schedulable"] for stmt in info["statements"]}
     var_to_data_id_map = {}
 
     # --- Phase 1: Create Initial Input Data Records ---
@@ -1152,26 +1159,19 @@ async def generate_execution_plan(
     for info in consolidated_schedule_info:
         if info["is_schedulable"]:
             master_entry = await generate_sequential_assignment(
-                info=info, 
-                job_id=job_id, 
-                job_dir=job_dir, 
-                node_map=node_map, 
-                node_address_map=node_address_map, 
-                var_to_data_id_map=var_to_data_id_map, 
-                var_consumers=var_consumers, 
-                last_schedulable_block_idx=last_schedulable_block_idx, 
-                input_file=input_file,
-                all_functions_source=all_functions_source, 
-                get_lhs_var=get_lhs_var, 
-                worker_client=worker_client, 
-                session=session
+                info=info, job_id=job_id, job_dir=job_dir, node_map=node_map, 
+                node_address_map=node_address_map, var_to_data_id_map=var_to_data_id_map, 
+                var_consumers=var_consumers, last_schedulable_block_idx=last_schedulable_block_idx, 
+                input_file=input_file, all_functions_source=all_functions_source, 
+                get_lhs_var=get_lhs_var, worker_client=worker_client, session=session
             )
             master_plan.append(master_entry)
         else:
-            # Placeholder for future parallel task handling
+            # Placeholder for parallelization logic
             statement = info["statements"][0] if info["statements"] else "Unknown"
             plan_result = parallelization_plan.get(statement, {})
-            master_plan.append(f"\n--- Task '{statement}' (UNPLANNED) ---\n  - Status: {plan_result.get('status', 'Memory Constraint')}")
+            status = plan_result.get("status", "Memory Constraint")
+            master_plan.append(f"\n--- Task '{statement}' (UNHANDLED) ---\n  - Status: {status}")
 
     # --- Phase 3: Write Master Schedule ---
     master_schedule_path = os.path.join(job_dir, "master_schedule.txt")

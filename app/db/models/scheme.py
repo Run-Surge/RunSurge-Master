@@ -6,7 +6,7 @@ from typing import Optional, List
 from datetime import datetime
 import uuid
 from app.utils.constants import DEFAULT_PORT
-
+from sqlalchemy.dialects.postgresql import BIGINT
 # everything concerned with data is in bytes
 
 Base = declarative_base()
@@ -67,8 +67,8 @@ class Node(Base):
 
     node_id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("user.user_id"))
-    node_name = Column(String, default=str(uuid.uuid4()))
-    ram = Column(Integer)
+    node_name = Column(String, default= lambda: str(uuid.uuid4()))
+    ram = Column(BIGINT, nullable=False)  # RAM in bytes
     ip_address = Column(String, nullable=False)
     port = Column(Integer, default=DEFAULT_PORT)
     created_at = Column(DateTime, default=datetime.now)
@@ -136,7 +136,7 @@ class Task(Base):
     job_id = Column(Integer, ForeignKey("job.job_id"))
     node_id = Column(Integer, ForeignKey("node.node_id"))
     status = Column(SQLEnum(TaskStatus), default=TaskStatus.pending)
-    required_ram = Column(Integer)
+    required_ram = Column(BIGINT)
     started_at = Column(DateTime, nullable=True)
     completed_at = Column(DateTime, nullable=True)
     retry_count = Column(Integer, default=0)
@@ -189,7 +189,7 @@ class NodeResources(Base):
     __tablename__ = "node_resources"
     
     node_id = Column(Integer, ForeignKey("node.node_id"), primary_key=True)
-    rem_ram = Column(Integer)
+    rem_ram = Column(BIGINT)
     rem_cpu_cores = Column(Integer)
 
     # Relationships

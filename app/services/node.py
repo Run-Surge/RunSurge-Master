@@ -32,6 +32,7 @@ class NodeService:
         try:
             db_node = await self.create_node(node)
             #TODO: check if node is alive
+            db_node.ram = node.memory_bytes
             db_node.ip_address = node.ip_address
             db_node.port = node.port
             db_node.is_alive = True

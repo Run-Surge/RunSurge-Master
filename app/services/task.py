@@ -57,6 +57,7 @@ class TaskService:
     async def _notify_dependents(self, task: Task):
         worker_client = WorkerClient()
         dependents_info = await self.get_task_output_dependencies_with_node_info(task.task_id)
+        await self.task_repo.session.refresh(task, ['node'])
         node = task.node
         for dependent in dependents_info:
             if dependent.node_id is None:

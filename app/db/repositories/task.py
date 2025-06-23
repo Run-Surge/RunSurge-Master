@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import select
+from sqlalchemy.dialects import postgresql
 from app.db.models.scheme import Task, Data, Node, TaskDataDependency
 from app.schemas.task import TaskCreate, TaskUpdate, TaskDataWithNodeInfo, TaskOutputDependentInfo
 from app.db.repositories.base import BaseRepository
@@ -85,12 +86,13 @@ class TaskRepository(BaseRepository[Task]):
         ]
 
     async def get_task_with_data_files(self, task_id: int):
-        print('wowwy')
-        query = (select(Task, Data).options(joinedload(Task.data_files)).where(
-            Task.task_id == task_id
-        ))
+        query = (
+            select(Task)
+            .options(joinedload(Task.data_files))
+            .where(Task.task_id == task_id)
+        )
         result = await self.session.execute(query)
-        return result.scalar()
+        return result.unique().scalar_one_or_none()
 
 async def get_task_repository(session: AsyncSession = Depends(get_db)) -> TaskRepository:
     return TaskRepository(session)
