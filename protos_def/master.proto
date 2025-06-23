@@ -30,8 +30,7 @@ message NodeRegisterRequest {
     string password = 2;
     string machine_fingerprint = 3;
     int64 memory_bytes = 4;
-    string ip_address = 5;
-    int32 port = 6;
+    int32 port = 5;
 }
 
 message MasterDataNotification {
