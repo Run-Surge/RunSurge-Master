@@ -25,7 +25,12 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow access from all origins
+    allow_origins=[
+        "http://10.10.10.213:3000",
+        "http://10.10.10.213",
+        "http://localhost:3000",
+        "http://localhost"
+    ],  # Allow access from specified origins
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

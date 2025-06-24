@@ -6,6 +6,7 @@ import math
 import csv
 import os
 import sys
+import traceback
 sys.path.append(os.path.join(os.path.dirname(__file__), 'protos'))
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from app.utils.constants import JOBS_DIRECTORY_PATH
@@ -848,8 +849,8 @@ async def generate_sequential_assignment(
     task_service = get_task_service(session)
     created_task = await task_service.create_task(job_id=job_id, data_ids=required_data_ids, required_ram=int(info["peak_memory"]), node_id=assigned_node_id)
     print(f"\nCreated DB Task with ID: {created_task.task_id} for Sequential Block {block_idx} on Node '{node_name}'")
-
-    task_python_code = [f"# --- Task {created_task.task_id} for Job {job_id} ---"]
+    current_task_id = created_task.task_id
+    task_python_code = [f"# --- Task {current_task_id} for Job {job_id} ---"]
 
     for key in valid_keys:
         var, source_idx_str = key.split(":")
@@ -867,20 +868,30 @@ async def generate_sequential_assignment(
             output_filename = f"{output_var}.csv"
             output_filepath = os.path.join(output_filename)
             if output_var not in var_to_data_id_map:
-                db_data_obj = await data_service.create_data(file_name=output_filename, parent_task_id=created_task.task_id)
+                db_data_obj = await data_service.create_data(file_name=output_filename, parent_task_id=current_task_id)
                 var_to_data_id_map[output_var] = db_data_obj.data_id
             output_data_infos.append({'data_id': var_to_data_id_map[output_var], 'data_name': output_filename})
             task_python_code.append(f"    with open(r'{output_filepath}', 'w', newline='') as f: csv.writer(f).writerows({output_var})")
-            task_python_code.append(f"    await send_data('{output_var}', '{output_filename}', {var_to_data_id_map[output_var]}, {list(var_consumers[output_var])})")
+            task_python_code.append(f"    send_data('{output_var}', '{output_filename}', {var_to_data_id_map[output_var]}, {list(var_consumers[output_var])})")
     
+    # --- ### NEW/MODIFIED ###: Logic for writing the final output file ---
     if block_idx == last_schedulable_block_idx:
         final_output_var = get_lhs_var(info["statements"][-1])
         final_output_filename = "output.csv"
+        # 1. Define a temporary filename with a random component
+        temp_output_filename = f"temp_output_{os.urandom(4).hex()}.csv"
+        # 2. Construct full paths inside the job directory
+        temp_output_filepath = os.path.join(temp_output_filename)
         final_output_filepath = os.path.join(final_output_filename)
         output_data_infos.append({'data_id': -1, 'data_name': final_output_filename})
-        task_python_code.append(f"    with open(r'{final_output_filepath}', 'w', newline='') as f: csv.writer(f).writerows({final_output_var})")
+        # 3. Generate code to write to the temporary file first
+        task_python_code.append(f"    print(f'--- This is the final task. Saving final result to temporary file. ---')")
+        task_python_code.append(f"    with open(r'{temp_output_filepath}', 'w', newline='') as f: csv.writer(f).writerows({final_output_var})")
+        # 4. Generate code to rename the temporary file to the final name. os.rename is atomic on most systems.
+        task_python_code.append(f"    print(f'--- Atomically moving temporary file to final output.csv ---')")
+        task_python_code.append(f"    os.rename(r'{temp_output_filepath}', r'{final_output_filepath}')")
 
-    task_script_name = f"task_{created_task.task_id}_script.py"
+    task_script_name = f"task_{current_task_id}_script.py"
     
     python_harness_preamble = f"""
 import time, csv, os, sys, json
@@ -920,9 +931,9 @@ def main():
 {joined_task_code}
 
 if __name__ == "__main__":
-    print(f"\\n*** Starting Task {created_task.task_id} for Job {job_id} ***\\n")
+    print(f"\\n*** Starting Task {current_task_id} for Job {job_id} ***\\n")
     main()
-    print(f"\\n*** Task {created_task.task_id} complete. ***\\n")
+    print(f"\\n*** Task {current_task_id} complete. ***\\n")
 """
     full_task_script_content = (python_harness_preamble + "\n\n" + all_functions_source + "\n\n" + task_main_logic)
     script_content_bytes = full_task_script_content.encode('utf-8')
@@ -934,7 +945,7 @@ if __name__ == "__main__":
     
     
     task_assignment_message = worker_pb2.TaskAssignment(
-        task_id=created_task.task_id, python_file=script_content_bytes,
+        task_id=current_task_id, python_file=script_content_bytes,
         python_file_name=task_script_name, required_data_ids=required_data_ids,
         output_data_infos=[worker_pb2.OutputDataInfo(**info) for info in output_data_infos],
         job_id=job_id
@@ -943,21 +954,21 @@ if __name__ == "__main__":
     success = await worker_client.assign_task(task_assignment=task_assignment_message, ip_address=ip_address, port=port)
 
     if success:
-        print(f"  -> Successfully assigned Task {created_task.task_id}.")
+        print(f"  -> Successfully assigned Task {current_task_id}.")
         for key in valid_keys:
             if key.split(":")[1] == 'none':
                 var = key.split(":")[0]
                 notification = worker_pb2.DataNotification(
-                    task_id=created_task.task_id, data_id=var_to_data_id_map[var], data_name=input_file,
+                    task_id=current_task_id, data_id=var_to_data_id_map[var], data_name=input_file,
                     ip_address=settings.GRPC_IP, port=settings.GRPC_PORT, hash=""
                 )
                 notify_success = await worker_client.notify_data(notification, ip_address, port)
                 if notify_success:
                     print(f"  -> Notified worker about input data for variable '{var}'.")
     else:
-        print(f"  -> FAILED to assign Task {created_task.task_id}.")
+        print(f"  -> FAILED to assign Task {current_task_id}.")
 
-    return f"\n--- BLOCK {block_idx} (Task {created_task.task_id} on {node_name}) ---\n  - Assigned for execution."
+    return f"\n--- BLOCK {block_idx} (Task {current_task_id} on {node_name}) ---\n  - Assigned for execution."
 
 async def generate_parallel_assignments(
     info: dict,
