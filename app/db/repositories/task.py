@@ -93,6 +93,11 @@ class TaskRepository(BaseRepository[Task]):
         )
         result = await self.session.execute(query)
         return result.unique().scalar_one_or_none()
+    
+    async def get_tasks_by_node_id(self, node_id: int) -> List[Task]:
+        query = select(Task).where(Task.node_id == node_id)
+        result = await self.session.execute(query)
+        return result.scalars().all()
 
 async def get_task_repository(session: AsyncSession = Depends(get_db)) -> TaskRepository:
     return TaskRepository(session)

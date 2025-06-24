@@ -57,5 +57,6 @@ class NodeService:
         return await self.node_repo.update(db_node)
 
 
+
 def get_node_service(session: AsyncSession) -> NodeService:
     return NodeService(NodeRepository(session))

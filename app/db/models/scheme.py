@@ -97,6 +97,17 @@ class NodeHeartbeat(Base):
     # Relationships
     node = relationship("Node", back_populates="heartbeat")
 
+# This class for the Jobs of the type complex, 1 group can have multiple jobs
+class Group(Base):
+    __tablename__ = "group"
+    
+    group_id = Column(Integer, primary_key=True, autoincrement=True)
+    group_name = Column(String)
+    created_at = Column(DateTime, default=datetime.now)
+
+    # Relationships
+    jobs = relationship("Job", back_populates="group")
+
 class Job(Base):
     __tablename__ = "job"
     
@@ -109,13 +120,13 @@ class Job(Base):
     script_name = Column(String)
     script_path = Column(String, nullable=True)
     output_data_id = Column(Integer, ForeignKey("data.data_id"), nullable=True)
-    
+    group_id = Column(Integer, ForeignKey("group.group_id"), nullable=True)
     # Relationships
     user = relationship("User", back_populates="jobs")
     tasks = relationship("Task", back_populates="job")
     input_data_files = relationship("InputData", back_populates="job") # All input data files related to this job
     output_data_file = relationship("Data", back_populates="parent_job", uselist=False) # The output data file related to this job
-
+    group = relationship("Group", back_populates="jobs")
 class InputData(Base):
     __tablename__ = "input_data"
     input_data_id = Column(Integer, primary_key=True, autoincrement=True)
@@ -200,13 +211,3 @@ class Payment(Base):
     # Relationships
     node = relationship("Node", back_populates="payments")
     task = relationship("Task", back_populates="payment") 
-
-class NodeResources(Base):
-    __tablename__ = "node_resources"
-    
-    node_id = Column(Integer, ForeignKey("node.node_id"), primary_key=True)
-    rem_ram = Column(BIGINT)
-    rem_cpu_cores = Column(Integer)
-
-    # Relationships
-    node = relationship("Node", back_populates="resources")

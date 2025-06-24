@@ -93,6 +93,14 @@ class TaskService:
             print(traceback.format_exc())
             logging.error(f"Error completing task: {e}")
             return False
+        
+    async def get_total_node_ram(self, node_id: int) -> int:
+        tasks = await self.task_repo.get_tasks_by_node_id(node_id)
+        total_ram = 0
+        for task in tasks:
+            total_ram += task.required_ram
+        return total_ram
+        
 
 def get_task_service(session: AsyncSession) -> TaskService:
     return TaskService(TaskRepository(session))

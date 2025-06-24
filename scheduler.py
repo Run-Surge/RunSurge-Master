@@ -1196,8 +1196,12 @@ async def generate_execution_plan(
 # 6. MAIN EXECUTION BLOCK
 # ==============================================================================
 async def scheduler(job_id: int, session: AsyncSession, input_file: str):
+        task_service = get_task_service(session)
         node_service = get_node_service(session)
         nodes = await node_service.get_all_nodes()
+        for node in nodes:
+            node.rem_ram = node.ram - await task_service.get_total_node_ram(node.node_id)
+        print(f"Nodes with available RAM: {nodes}")
         nodes_data, node_map = convert_nodes_into_Json(nodes)
         job_dir = os.path.join(JOBS_DIRECTORY_PATH, str(job_id))
 

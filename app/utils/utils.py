@@ -35,7 +35,7 @@ def validate_data_chunk(file: UploadFile):
 
 def convert_nodes_into_Json(data: list[Node]):
     print(f'number of nodes {len(data)}')
-    nodes_list = [{"name": node.node_name, "memory": node.ram, "ip_address": node.ip_address, "port": node.port} for node in data]
+    nodes_list = [{"name": node.node_name, "memory": node.rem_ram, "ip_address": node.ip_address, "port": node.port} for node in data]
     node_map = {node.node_name: node.node_id for node in data}
     return nodes_list, node_map
 
