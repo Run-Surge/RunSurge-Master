@@ -60,6 +60,7 @@ class User(Base):
     # Relationships
     jobs = relationship("Job", back_populates="user")
     nodes = relationship("Node", back_populates="user")
+    groups = relationship("Group", back_populates="user")
 
 
 # ram is in bytes, cpu_cores is in cores
@@ -102,11 +103,13 @@ class Group(Base):
     __tablename__ = "group"
     
     group_id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("user.user_id"))
     group_name = Column(String)
     created_at = Column(DateTime, default=datetime.now)
 
     # Relationships
     jobs = relationship("Job", back_populates="group")
+    user = relationship("User", back_populates="groups")
 
 class Job(Base):
     __tablename__ = "job"

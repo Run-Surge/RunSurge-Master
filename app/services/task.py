@@ -95,7 +95,7 @@ class TaskService:
             return False
         
     async def get_total_node_ram(self, node_id: int) -> int:
-        tasks = await self.task_repo.get_tasks_by_node_id(node_id)
+        tasks = await self.task_repo.get_running_tasks_by_node_id(node_id)
         total_ram = 0
         for task in tasks:
             total_ram += task.required_ram

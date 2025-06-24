@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import select
 from sqlalchemy.dialects import postgresql
-from app.db.models.scheme import Task, Data, Node, TaskDataDependency
+from app.db.models.scheme import Task, Data, Node, TaskDataDependency, TaskStatus
 from app.schemas.task import TaskCreate, TaskUpdate, TaskDataWithNodeInfo, TaskOutputDependentInfo
 from app.db.repositories.base import BaseRepository
 from fastapi import Depends
@@ -94,8 +94,8 @@ class TaskRepository(BaseRepository[Task]):
         result = await self.session.execute(query)
         return result.unique().scalar_one_or_none()
     
-    async def get_tasks_by_node_id(self, node_id: int) -> List[Task]:
-        query = select(Task).where(Task.node_id == node_id)
+    async def get_running_tasks_by_node_id(self, node_id: int) -> List[Task]:
+        query = select(Task).where(Task.node_id == node_id, Task.status == TaskStatus.running)
         result = await self.session.execute(query)
         return result.scalars().all()
 
