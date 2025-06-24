@@ -103,7 +103,10 @@ class Group(Base):
     
     group_id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("user.user_id"))
+
     group_name = Column(String)
+    python_file_name = Column(String)
+    num_of_jobs = Column(Integer)
     created_at = Column(DateTime, default=datetime.now)
 
     # Relationships
