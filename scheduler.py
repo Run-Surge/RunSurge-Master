@@ -14,6 +14,7 @@ from app.services.task import get_task_service
 from app.services.data import get_data_service
 from app.services.node import get_node_service
 from app.services.job import get_job_service
+from app.services.data import get_input_data_service
 from app.db.session import  get_db_context, init_db
 from app.db.models.scheme import JobStatus
 import asyncio
@@ -21,8 +22,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.services.worker_client import WorkerClient
 from protos import worker_pb2
 from app.core.config import Settings
+import traceback
 settings = Settings()
-input_file = "123456.csv"
+input_file = None
 
 # ==============================================================================
 # 1. CORE MEMORY CALCULATION LOGIC
@@ -865,7 +867,7 @@ async def generate_sequential_assignment(
             output_filename = f"{output_var}.csv"
             output_filepath = os.path.join(output_filename)
             if output_var not in var_to_data_id_map:
-                db_data_obj = await data_service.create_data(file_name=output_filename, job_id=job_id, parent_task_id=created_task.task_id)
+                db_data_obj = await data_service.create_data(file_name=output_filename, parent_task_id=created_task.task_id)
                 var_to_data_id_map[output_var] = db_data_obj.data_id
             output_data_infos.append({'data_id': var_to_data_id_map[output_var], 'data_name': output_filename})
             task_python_code.append(f"    with open(r'{output_filepath}', 'w', newline='') as f: csv.writer(f).writerows({output_var})")
@@ -1014,7 +1016,7 @@ async def generate_parallel_assignments(
             
             # Create DB records for this chunk's data dependencies
             data_service = get_data_service(session)
-            chunk_data_obj = await data_service.create_data(file_name=chunk_filename, job_id=job_id, parent_task_id=None)
+            chunk_data_obj = await data_service.create_data(file_name=chunk_filename, parent_task_id=None)
             other_req_ids = [var_to_data_id_map[arg] for arg in arg_names if arg != parallel_arg_name and arg in var_to_data_id_map]
             
             # Create the task in the DB for this specific chunk
@@ -1145,7 +1147,7 @@ async def generate_execution_plan(
     data_service = get_data_service(session)
     all_initial_vars = {key.split(":")[0] for block in consolidated_schedule_info for key in block.get("key", []) if key.endswith(":none") and key.split(":")[0] != "none"}
     for var_name in all_initial_vars:
-        db_data_obj = await data_service.create_data(file_name=input_file, job_id=job_id, parent_task_id=None)
+        db_data_obj = await data_service.create_data(file_name=input_file, parent_task_id=None)
         var_to_data_id_map[var_name] = db_data_obj.data_id
         
     # --- Phase 2: Orchestrate Plan Generation ---
@@ -1182,7 +1184,7 @@ async def generate_execution_plan(
 # ==============================================================================
 # 6. MAIN EXECUTION BLOCK
 # ==============================================================================
-async def scheduler(job_id: int, session: AsyncSession):
+async def scheduler(job_id: int, session: AsyncSession, input_file: str):
         node_service = get_node_service(session)
         nodes = await node_service.get_all_nodes()
         nodes_data, node_map = convert_nodes_into_Json(nodes)
@@ -1310,6 +1312,7 @@ async def scheduler(job_id: int, session: AsyncSession):
         print("\n--- SCHEDULING PROCESS COMPLETE ---")
 
 async def main():
+    global input_file
     await init_db()
     while True:
         async with get_db_context() as session:
@@ -1320,9 +1323,21 @@ async def main():
                 print(f"Found {len(jobs)} jobs to schedule")
                 for job in jobs:
                     ## update job status to running after scheduler is done
-                    await scheduler(job.job_id, session)
+                    
+                    # Get the input file name from the job's relationship
+                    print(f"Job id: {job.job_id}")
+                    input_data_service = get_input_data_service(session)
+                    input_data = await input_data_service.get_input_data(job.job_id)
+                    print(f"Input data: {input_data}")
+                    if input_data:
+                        input_file = str(input_data.input_data_id) + ".csv"
+                        print(f" from scheduler Input file: {input_file}")
+                        await scheduler(job.job_id, session, input_file)
+                    else:
+                        print(f"No input data found for job {job.job_id}")
 
             except Exception as e:
+                print(traceback.format_exc())
                 print(f"Error: {e}")
             await asyncio.sleep(10)
 

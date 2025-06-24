@@ -20,3 +20,6 @@ class JobRead(JobBase):
     job_name: str
     job_type: JobType
     script_name: str
+
+class JobDetailRead(JobRead):
+    input_file_name: str

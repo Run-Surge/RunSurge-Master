@@ -12,7 +12,8 @@ from sqlalchemy.dialects.postgresql import BIGINT
 Base = declarative_base()
 
 class JobStatus(str, Enum):
-    pending = 'pending'
+    submitted = 'submitted'
+    pending_schedule = 'pending_schedule'
     running = 'running'
     completed = 'completed'
     failed = 'failed'
@@ -103,32 +104,48 @@ class Job(Base):
     user_id = Column(Integer, ForeignKey("user.user_id"))
     job_name = Column(String)
     job_type = Column(SQLEnum(JobType))
-    status = Column(SQLEnum(JobStatus), default=JobStatus.pending)
+    status = Column(SQLEnum(JobStatus), default=JobStatus.submitted)
     created_at = Column(DateTime, default=datetime.now)
     script_name = Column(String)
     script_path = Column(String, nullable=True)
+    output_data_id = Column(Integer, ForeignKey("data.data_id"), nullable=True)
     
     # Relationships
     user = relationship("User", back_populates="jobs")
     tasks = relationship("Task", back_populates="job")
-    data_files = relationship("Data", back_populates="job")
+    input_data_files = relationship("InputData", back_populates="job") # All input data files related to this job
+    output_data_file = relationship("Data", back_populates="parent_job", uselist=False) # The output data file related to this job
 
+class InputData(Base):
+    __tablename__ = "input_data"
+    input_data_id = Column(Integer, primary_key=True, autoincrement=True)
+    job_id = Column(Integer, ForeignKey("job.job_id"))
+    created_at = Column(DateTime, default=datetime.now)
+    chunk_index = Column(Integer)
+    total_chunks = Column(Integer)
+    file_name = Column(String)
 
+    # Relationships
+    job = relationship("Job", back_populates="input_data_files")
+    
 class Data(Base):
     __tablename__ = "data"
     
     data_id = Column(Integer, primary_key=True, autoincrement=True)
     file_name = Column(String)
-    job_id = Column(Integer, ForeignKey("job.job_id"))
     parent_task_id = Column(Integer, ForeignKey("task.task_id"), nullable=True)
     data_location = Column(SQLEnum(DataLocationType), default=DataLocationType.master)
     created_at = Column(DateTime, default=datetime.now)
     status = Column(SQLEnum(DataStatus), default=DataStatus.pending)    
     
     # Relationships
-    job = relationship("Job", back_populates="data_files")
     dependent_tasks = relationship("Task", secondary="task_data_dependency", back_populates="data_dependencies")
-    parent_task = relationship("Task", back_populates="data_files")
+    parent_task = relationship("Task", back_populates="data_files")  # The task this data file is its output
+    parent_job = relationship("Job", back_populates="output_data_file")  # The job this data file is its output
+    
+
+
+    
 
 class Task(Base):
     __tablename__ = "task"
@@ -150,7 +167,6 @@ class Task(Base):
     data_dependencies = relationship("Data", secondary="task_data_dependency", back_populates="dependent_tasks")
     logs = relationship("NodeLog", back_populates="task")
     payment = relationship("Payment", back_populates="task", uselist=False)
-    data_files = relationship("Data", back_populates="parent_task")
 
 
 class TaskDataDependency(Base):
