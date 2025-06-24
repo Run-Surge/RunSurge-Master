@@ -79,7 +79,6 @@ class Node(Base):
 
     # Relationships
     heartbeat = relationship("NodeHeartbeat", back_populates="node", uselist=False)
-    resources = relationship("NodeResources", back_populates="node", uselist=False)
     tasks = relationship("Task", back_populates="node")
     logs = relationship("NodeLog", back_populates="node")
     payments = relationship("Payment", back_populates="node")

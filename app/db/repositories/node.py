@@ -1,12 +1,12 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import select, and_
-from app.db.models.scheme import Node, NodeResources
 from app.db.repositories.base import BaseRepository
 from typing import Optional, List
 from fastapi import Depends
 from app.db.session import get_db
 from app.schemas.node import NodeRegisterGRPC
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.db.models.scheme import Node
 
 class NodeRepository(BaseRepository[Node]):
     def __init__(self, session: AsyncSession):
@@ -43,13 +43,6 @@ class NodeRepository(BaseRepository[Node]):
         )
         result = await self.session.execute(statement)
         return result.scalars().first()
-
-    async def get_available_nodes(self, required_ram: int) -> List[Node]:
-        statement = select(Node).join(NodeResources).where(
-            NodeResources.rem_ram >= required_ram
-        )
-        result = await self.session.execute(statement)
-        return result.scalars().all()
 
     async def get_user_nodes(self, user_id: int) -> List[Node]:
         statement = select(Node).where(Node.user_id == user_id)

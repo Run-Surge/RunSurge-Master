@@ -1,4 +1,4 @@
-from app.db.models.scheme import NodeResources
+
 from protos import worker_pb2_grpc, worker_pb2
 import logging
 import grpc
