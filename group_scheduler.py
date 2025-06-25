@@ -24,16 +24,24 @@ from app.services.worker_client import WorkerClient
 from protos import worker_pb2
 from app.core.config import Settings
 import traceback
+from sqlalchemy.types import BigInteger
 settings = Settings()
 input_file = None
 
+# input to single task job scheduler
+# job_id, input_data_id, input_filename, peak_memory, session
+
+
 async def single_task_job_scheduler(
+    group_id: int,
     job_id: int,
     input_data_id: int,
-    input_filename: str,
-    peak_memory: int,
+    peak_memory: BigInteger,
     session: AsyncSession
 ):
+    print("from new scheduler")
+    print(f"group_id: {group_id}, job_id: {job_id}, input_data_id: {input_data_id}, input_file_size: {input_file_size}, peak_memory: {peak_memory}")
+    return
     """
     A simplified scheduler that correctly handles detached ORM objects by extracting
     necessary data into local variables immediately.

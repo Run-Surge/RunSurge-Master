@@ -17,7 +17,7 @@ from app.services.node import get_node_service
 from app.services.job import get_job_service
 from app.services.data import get_input_data_service
 from app.db.session import  get_db_context, init_db
-from app.db.models.scheme import JobStatus
+from app.db.models.scheme import JobStatus, JobType
 import asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.services.worker_client import WorkerClient
@@ -26,6 +26,9 @@ from app.core.config import Settings
 import traceback
 settings = Settings()
 input_file = None
+from group_scheduler import single_task_job_scheduler
+from app.utils.utils import get_file_size
+from app.utils.constants import GROUPS_DIRECTORY_PATH
 
 # ==============================================================================
 # 1. CORE MEMORY CALCULATION LOGIC
@@ -1359,8 +1362,8 @@ async def main():
                 print(f"Found {len(jobs)} jobs to schedule")
                 for job in jobs:
                     ## update job status to running after scheduler is done
-                    
                     # Get the input file name from the job's relationship
+
                     print(f"Job id: {job.job_id}")
                     input_data_service = get_input_data_service(session)
                     input_data = await input_data_service.get_input_data(job.job_id)
@@ -1368,7 +1371,11 @@ async def main():
                     if input_data:
                         input_file = str(input_data.input_data_id) + ".csv"
                         print(f" from scheduler Input file: {input_file}")
-                        await scheduler(job.job_id, session, input_file)
+                        if job.job_type == JobType.complex:
+                          file_size = get_file_size(os.path.join(GROUPS_DIRECTORY_PATH, str(job.group_id)))
+                          await single_task_job_scheduler(job.group_id, job.job_id, input_data.input_data_id, file_size, job.required_ram, session)
+                        else:
+                            await scheduler(job.job_id, session, input_file)
                     else:
                         print(f"No input data found for job {job.job_id}")
 

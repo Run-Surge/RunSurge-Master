@@ -62,3 +62,6 @@ def format_bytes(bytes: int) -> str:
         return f"{bytes / (1024 * 1024)} MB"
     else:
         return f"{bytes / (1024 * 1024 * 1024)} GB"
+    
+def get_file_size(path: str) -> int:
+    return os.path.getsize(path)
