@@ -1210,7 +1210,7 @@ async def scheduler(job_id: int, session: AsyncSession, input_file: str):
         if not nodes:
             print(f"FATAL ERROR: No worker nodes are available in the system. Cannot schedule job {job_id}.")
             job_service = get_job_service(session)
-            await job_service.update_job_status(job_id, JobStatus.failed)
+            await job_service.update_job_status(job_id, JobStatus.pending_schedule)
             # Write a status file explaining the failure
             with open(os.path.join(job_dir, "final_schedule_info.json"), "w") as f:
                 json.dump({"status": "failed", "reason": "No available worker nodes"}, f, indent=4)
@@ -1278,7 +1278,7 @@ async def scheduler(job_id: int, session: AsyncSession, input_file: str):
             # 2. If not a single block could be scheduled, the job has failed.
             if not is_any_block_schedulable:
                 job_service = get_job_service(session)
-                await job_service.update_job_status(job_id, JobStatus.failed)
+                await job_service.update_job_status(job_id, JobStatus.pending_schedule)
                 # Write a final status file and exit.
                 with open(os.path.join(job_dir, "final_schedule_info.json"), "w") as f:
                     json.dump({"status": "failed", "reason": "All blocks are unschedulable"}, f, indent=4)
@@ -1286,6 +1286,27 @@ async def scheduler(job_id: int, session: AsyncSession, input_file: str):
             
             unschedulable_final_blocks = [info for info in consolidated_schedule_info if not info["is_schedulable"]]
             parallelization_plan = plan_data_parallelization(unschedulable_final_blocks, nodes_data, live_vars_data, func_footprints_data)
+            # --- ### NEW LOGIC ### ---
+            # After attempting parallelization, check if any of those plans failed.
+            for block in unschedulable_final_blocks:
+                statement = block["statements"][0]
+                plan_result = parallelization_plan.get(statement, {})
+                # If a plan failed or was deferred, it means the job cannot fully proceed right now.
+                if plan_result.get("status") != "Success":
+                    print(f"\nHALTING JOB: Block for statement '{statement}' could not be parallelized or is deferred.")
+                    print(f"  -> Reason: {plan_result.get('reason', 'Unknown')}")
+                    print(f"  -> Setting job status to PENDING_SCHEDULE for re-evaluation.")
+                    
+                    job_service = get_job_service(session)
+                    await job_service.update_job_status(job_id, JobStatus.pending_schedule)
+                    
+                    # Write debug files and exit the function for this job.
+                    with open(os.path.join(job_dir, "final_schedule_info.json"), "w") as f:
+                        json.dump(consolidated_schedule_info, f, indent=4)
+                    with open(os.path.join(job_dir, "parallelization_plan.json"), "w") as f:
+                        json.dump(parallelization_plan, f, indent=4)
+                    return # Stop processing this job for this cycle.
+            
         else:
             consolidated_schedule = [{"key": info["key"], "statements": info["statements"]} for info in consolidated_schedule_info]
 
