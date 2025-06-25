@@ -33,6 +33,16 @@ class JobRepository(BaseRepository[Job]):
             await self.session.commit()
             await self.session.refresh(job)
         return job
+    
+    async def update_complex_job_ram_and_status(self, job_id: int, job: Job) -> Optional[Job]:
+        db_job = await self.get_by_id(job_id)
+        if db_job:
+            db_job.required_ram = job.required_ram
+            db_job.status=job.status
+            await self.session.commit()
+            await self.session.refresh(job)
+        return db_job
+
     async def update_job_script_path(self, job_id: int, script_path: str) -> Optional[Job]:
         job = await self.get_by_id(job_id)
         if job:
@@ -56,7 +66,6 @@ class JobRepository(BaseRepository[Job]):
             job_name=job_data.job_name,
             job_type=job_data.job_type,
             group_id=job_data.group_id, 
-            script_path=job_data.script_path
         )
         return await self.create(job)
 

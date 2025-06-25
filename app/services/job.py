@@ -43,8 +43,8 @@ class JobService:
             raise HTTPException(status_code=404, detail="Job not found")
         return job
 
-    async def update_job(self, job_id: int, job: Job):
-        return await self.job_repo.update_job(job_id, job)
+    async def update_job_ram_and_status(self, job_id: int, job: Job):
+        return await self.job_repo.update_job_ram_and_status(job_id, job)
     
     async def get_simple_user_jobs(self, user_id: int):
         return await self.job_repo.get_simple_user_jobs(user_id)
@@ -54,6 +54,9 @@ class JobService:
     
     async def update_job_status(self, job_id: int, status: JobStatus):
         return await self.job_repo.update_job_status(job_id, status)
+    
+    async def update_complex_job_ram_and_status(self, job_id: int, job: Job):
+        return await self.job_repo.update_complex_job_ram_and_status(job_id, job)
         
     async def check_job_status(self, job_id: int):
         job = await self.get_job(job_id)

@@ -3,7 +3,7 @@ import os
 from fastapi import UploadFile
 from app.db.models.scheme import Node, Data 
 from fastapi import HTTPException
-from app.utils.constants import FILE_SIZE_LIMIT, DATA_CHUNK_SIZE_LIMIT  
+from app.utils.constants import FILE_SIZE_LIMIT, DATA_CHUNK_SIZE_LIMIT, ZIP_FILE_CHUNK_SIZE_LIMIT
 
 def Create_directory(path: str):
     if not os.path.exists(path):
@@ -14,6 +14,10 @@ def save_file(file: UploadFile, path: str):
         f.write(file.file.read())
 def append_chunk_to_file(input_file: UploadFile, file_path: str, file_name: str):
     with open(os.path.join(file_path, f"{file_name}.csv"), "ab") as f:
+        f.write(input_file.file.read())
+
+def append_chunk_to_zip_file(input_file: UploadFile, file_path: str, file_name: str):
+    with open(os.path.join(file_path, f"{file_name}.zip"), "ab") as f:
         f.write(input_file.file.read())
 
 
@@ -31,6 +35,12 @@ def validate_data_chunk(file: UploadFile):
     if file.size == 0:
         raise HTTPException(status_code=400, detail="File is empty")
     if file.size > DATA_CHUNK_SIZE_LIMIT:
+        raise HTTPException(status_code=400, detail="File size exceeds 10MB limit") 
+
+def validate_zip_file_chunk(file: UploadFile):
+    if file.size == 0:
+        raise HTTPException(status_code=400, detail="File is empty")
+    if file.size > ZIP_FILE_CHUNK_SIZE_LIMIT:
         raise HTTPException(status_code=400, detail="File size exceeds 10MB limit") 
 
 def convert_nodes_into_Json(data: list[Node]):

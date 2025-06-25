@@ -6,3 +6,4 @@ DEFAULT_PORT = 2222
 FUNC_FOOTPRINT_FILE = "func_lines_footprint.json"
 MAIN_FOOTPRINT_FILE = "main_lines_footprint.json"
 MAIN_LISTS_FILE = "main_lists.json"
+ZIP_FILE_CHUNK_SIZE_LIMIT = 100 * 1024 * 1024

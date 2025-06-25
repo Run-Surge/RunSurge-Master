@@ -12,7 +12,7 @@ from app.db.models.scheme import JobType, JobStatus
 from app.utils.constants import JOBS_DIRECTORY_PATH
 from Parallelization.Parallelizer import Parallelizer
 from app.services.data import get_input_data_service
-from app.utils.utils import Create_directory, append_chunk_to_file, validate_data_chunk
+from app.utils.utils import append_chunk_to_file, validate_data_chunk
 router = APIRouter()
 
 @router.post("/", response_model=JobRead)
@@ -110,4 +110,6 @@ async def upload_data(
         print(e)
         raise HTTPException(status_code=500, detail=str(e))
 
+
+#-------------------------------------------------Complex Job-------------------------------------------------
 
