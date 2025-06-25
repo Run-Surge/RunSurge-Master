@@ -36,36 +36,42 @@ async def single_task_job_scheduler(
     group_id: int,
     job_id: int,
     input_data_id: int,
+    input_file_size: BigInteger,
     peak_memory: BigInteger,
-    session: AsyncSession
+    session: AsyncSession,
 ):
-    print("from new scheduler")
-    print(f"group_id: {group_id}, job_id: {job_id}, input_data_id: {input_data_id}, input_file_size: {input_file_size}, peak_memory: {peak_memory}")
-    return
     """
     A simplified scheduler that correctly handles detached ORM objects by extracting
     necessary data into local variables immediately.
     """
+    # print("from new scheduler")
+    # print(f"group_id: {group_id}, job_id: {job_id}, input_data_id: {input_data_id}, input_file_size: {input_file_size}, peak_memory: {peak_memory}, input_filename: {input_filename}")
     print(f"\n--- Running Simple Scheduler for Job ID: {job_id} ---")
     job_dir = os.path.join(JOBS_DIRECTORY_PATH, str(job_id))
     os.makedirs(job_dir, exist_ok=True)
 
     # --- 1. Get Node Resources ---
     node_service = get_node_service(session)
+    task_service = get_task_service(session)
     nodes = await node_service.get_all_nodes()
+    for node in nodes:
+        consumed_ram = await task_service.get_total_node_ram(node.node_id)
+        print(f"Node {node.node_id} has {node.ram} RAM, consumed: {consumed_ram}")
+        node.ram = node.ram - consumed_ram
 
     if not nodes:
         print(f"  -> FATAL ERROR: No worker nodes are available. Cannot schedule job {job_id}.")
         job_service = get_job_service(session)
-        await job_service.update_job_status(job_id, JobStatus.failed)
+        # await job_service.update_job_status(job_id, JobStatus.pending_schedule)
         return
 
     nodes_data, node_map = convert_nodes_into_Json(nodes)
     node_address_map = {node["name"]: (node["ip_address"], node["port"]) for node in nodes_data}
-    print(f"  -> Available nodes: {nodes_data}")
+    # print(f"  -> Available nodes: {nodes_data}")
 
     # --- 2. Find a Fitting Node ---
     sorted_nodes = sorted(nodes_data, key=lambda x: x["memory"])
+    # print(f"  -> Sorted nodes by memory: {sorted_nodes}")
     fitting_node = next(
         (node for node in sorted_nodes if node["memory"] >= peak_memory), None
     )
@@ -73,7 +79,7 @@ async def single_task_job_scheduler(
     if not fitting_node:
         print(f"  -> FATAL ERROR: No node has enough memory ({peak_memory} required). Cannot schedule job {job_id}.")
         job_service = get_job_service(session)
-        await job_service.update_job_status(job_id, JobStatus.failed)
+        # await job_service.update_job_status(job_id, JobStatus.pending_schedule)
         return
     
     # Extract node info immediately
@@ -83,7 +89,6 @@ async def single_task_job_scheduler(
     print(f"  -> Found fitting node: '{node_name}' at {ip_address}:{port}")
 
     # --- 3. Create Task and Output Data Records in DB ---
-    task_service = get_task_service(session)
     data_service = get_data_service(session)
     
     created_task_obj = await task_service.create_task(
@@ -96,15 +101,15 @@ async def single_task_job_scheduler(
 
     output_filename = "output.zip"
     output_data_obj = await data_service.create_data(
-        file_name=output_filename, job_id=job_id,
+        file_name=output_filename,
         parent_task_id=created_task_id
     )
     # --- ### CORRECTION ###: Extract the ID immediately ---
     output_data_id = output_data_obj.data_id
     print(f"  -> Created Output Data record with ID: {output_data_id}")
     
-    # --- 4. Prepare for Task Assignment ---
-    task_script_name = f"task_{created_task_id}_simple_job.py"
+#     # --- 4. Prepare for Task Assignment ---
+#     task_script_name = f"task_{created_task_id}_simple_job.py"
     script_content = f"""
 print("Executing pre-defined simple job logic for task {created_task_id}")
 """
@@ -119,7 +124,7 @@ print("Executing pre-defined simple job logic for task {created_task_id}")
 
     task_assignment_message = worker_pb2.TaskAssignment(
         task_id=created_task_id, python_file=script_content_bytes,
-        python_file_name=task_script_name, required_data_ids=[input_data_id],
+        python_file_name=str(group_id), required_data_ids=[input_data_id],
         output_data_infos=output_data_infos, job_id=job_id
     )
 
@@ -132,20 +137,21 @@ print("Executing pre-defined simple job logic for task {created_task_id}")
 
     if success:
         print(f"  -> Successfully assigned Task {created_task_id}.")
-        print(f"    -> Notifying {node_name} that initial data '{input_filename}' is ready.")
+        print(f"    -> Notifying {node_name} that initial data '{group_id}' is ready.")
         notification = worker_pb2.DataNotification(
             task_id=created_task_id, data_id=input_data_id,
-            data_name=input_filename, ip_address=settings.GRPC_IP,
+            data_name=str(group_id), ip_address=settings.GRPC_IP,
             port=settings.GRPC_PORT, hash=""
         )
-        await worker_client.notify_data(notification, ip_address, port)
-        # Update job status to running only after successful assignment and notification
+        notify_success = await worker_client.notify_data(notification, ip_address, port)
+        if notify_success:
+            print(f"  -> Successfully notified {node_name} about initial data '{group_id}'.")
+        else:
+            print(f"  -> FAILED to notify {node_name} about initial data '{group_id}'.")
+        # Update job status to running only after successful assignment and notification4
         job_service = get_job_service(session)
         await job_service.update_job_status(job_id, JobStatus.running)
     else:
         print(f"  -> FAILED to assign Task {created_task_id}.")
-        job_service = get_job_service(session)
-        await job_service.update_job_status(job_id, JobStatus.failed)
-        return
 
     print(f"--- Simple Scheduling for Job {job_id} Complete. ---")

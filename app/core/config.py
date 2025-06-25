@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     DB_PORT: int
 
     MASTER_PORT: Optional[int] = 8000
-    GRPC_IP: Optional[str] = "10.10.10.213"
+    GRPC_IP: Optional[str] = "10.10.10.193"
     GRPC_PORT: Optional[int] = 12345
 
     @property

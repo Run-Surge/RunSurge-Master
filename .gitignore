@@ -202,3 +202,5 @@ Parallelization/temp/ddg_parsed
 Parallelization/temp/memory_parsed
 test_cases/*
 temp_scheduler.py
+Groups/*
+input.zip

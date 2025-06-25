@@ -868,13 +868,16 @@ async def generate_sequential_assignment(
         task_python_code.append(f"    print(f'EXECUTING: {stmt}')")
         task_python_code.append(f"    {stmt}")
         if output_var in var_consumers:
+            temp_output_filename = f"temp_{output_var}_{os.urandom(4).hex()}.csv"
+            temp_output_filepath = os.path.join(temp_output_filename)
             output_filename = f"{output_var}.csv"
-            output_filepath = os.path.join(output_filename)
+            final_output_filepath = os.path.join(output_filename)
             if output_var not in var_to_data_id_map:
                 db_data_obj = await data_service.create_data(file_name=output_filename, parent_task_id=current_task_id)
                 var_to_data_id_map[output_var] = db_data_obj.data_id
             output_data_infos.append({'data_id': var_to_data_id_map[output_var], 'data_name': output_filename})
-            task_python_code.append(f"    with open(r'{output_filepath}', 'w', newline='') as f: csv.writer(f).writerows({output_var})")
+            task_python_code.append(f"    with open(r'{temp_output_filepath}', 'w', newline='') as f: csv.writer(f).writerows({output_var})")
+            task_python_code.append(f"    os.rename(r'{temp_output_filepath}', r'{final_output_filepath}')")
             task_python_code.append(f"    send_data('{output_var}', '{output_filename}', {var_to_data_id_map[output_var]}, {list(var_consumers[output_var])})")
     
     # --- ### NEW/MODIFIED ###: Logic for writing the final output file ---
@@ -977,7 +980,7 @@ async def generate_parallel_assignments(
     info: dict,
     plan_result: dict,
     job_id: int,
-    job_dir: str,
+    job_dir: str, 
     node_map: dict,
     nodes_data: list,
     node_address_map: dict,
@@ -1123,8 +1126,7 @@ async def generate_execution_plan(
     parallelization_plan,
     live_vars_data,
     func_footprints_data,
-    input_header,
-    input_data_rows,
+    input_file: str,
     session: AsyncSession
 ):
     """
@@ -1203,8 +1205,9 @@ async def scheduler(job_id: int, session: AsyncSession, input_file: str):
         node_service = get_node_service(session)
         nodes = await node_service.get_all_nodes()
         for node in nodes:
-            node.rem_ram = node.ram - await task_service.get_total_node_ram(node.node_id)
-        print(f"Nodes with available RAM: {nodes}")
+            consumed_ram = await task_service.get_total_node_ram(node.node_id)
+            # print(f"Node {node.name} has {node.ram} RAM, consumed: {consumed_ram}")
+            node.ram = node.ram - consumed_ram
         nodes_data, node_map = convert_nodes_into_Json(nodes)
         job_dir = os.path.join(JOBS_DIRECTORY_PATH, str(job_id))
 
@@ -1213,7 +1216,7 @@ async def scheduler(job_id: int, session: AsyncSession, input_file: str):
         if not nodes:
             print(f"FATAL ERROR: No worker nodes are available in the system. Cannot schedule job {job_id}.")
             job_service = get_job_service(session)
-            await job_service.update_job_status(job_id, JobStatus.pending_schedule)
+            # await job_service.update_job_status(job_id, JobStatus.pending_schedule)
             # Write a status file explaining the failure
             with open(os.path.join(job_dir, "final_schedule_info.json"), "w") as f:
                 json.dump({"status": "failed", "reason": "No available worker nodes"}, f, indent=4)
@@ -1230,22 +1233,22 @@ async def scheduler(job_id: int, session: AsyncSession, input_file: str):
         
         input_header = None
         input_data_rows = None
-        if input_file:
-            try:
-                primary_input_path = os.path.join(job_dir, input_file)
-                with open(primary_input_path, 'r', newline='') as f:
-                    reader = csv.reader(f)
-                    primary_input_data = list(reader)
+        # if input_file:
+        #     try:
+        #         primary_input_path = os.path.join(job_dir, input_file)
+        #         with open(primary_input_path, 'r', newline='') as f:
+        #             reader = csv.reader(f)
+        #             primary_input_data = list(reader)
 
-                if len(primary_input_data) > 1:
-                    input_header = primary_input_data[0]
-                    input_data_rows = primary_input_data[1:]
-                    print(f"Successfully loaded primary input data from '{primary_input_path}' ({len(input_data_rows)} data rows).")
-                else:
-                    print(f"Warning: Input CSV file '{primary_input_path}' must have a header and at least one data row.")
-            except FileNotFoundError:
-                print(f"Error: Primary input CSV file not found at '{primary_input_path}'")
-                return # Stop if the main input is missing
+        #         if len(primary_input_data) > 1:
+        #             input_header = primary_input_data[0]
+        #             input_data_rows = primary_input_data[1:]
+        #             print(f"Successfully loaded primary input data from '{primary_input_path}' ({len(input_data_rows)} data rows).")
+        #         else:
+        #             print(f"Warning: Input CSV file '{primary_input_path}' must have a header and at least one data row.")
+        #     except FileNotFoundError:
+        #         print(f"Error: Primary input CSV file not found at '{primary_input_path}'")
+        #         return # Stop if the main input is missing
         # --- Prepare statement-to-index map ---
         full_program_statements = [
             stmt for block in initial_blocks for stmt in block["statements"]
@@ -1281,7 +1284,7 @@ async def scheduler(job_id: int, session: AsyncSession, input_file: str):
             # 2. If not a single block could be scheduled, the job has failed.
             if not is_any_block_schedulable:
                 job_service = get_job_service(session)
-                await job_service.update_job_status(job_id, JobStatus.pending_schedule)
+                # await job_service.update_job_status(job_id, JobStatus.pending_schedule)
                 # Write a final status file and exit.
                 with open(os.path.join(job_dir, "final_schedule_info.json"), "w") as f:
                     json.dump({"status": "failed", "reason": "All blocks are unschedulable"}, f, indent=4)
@@ -1301,7 +1304,7 @@ async def scheduler(job_id: int, session: AsyncSession, input_file: str):
                     print(f"  -> Setting job status to PENDING_SCHEDULE for re-evaluation.")
                     
                     job_service = get_job_service(session)
-                    await job_service.update_job_status(job_id, JobStatus.pending_schedule)
+                    # await job_service.update_job_status(job_id, JobStatus.pending_schedule)
                     
                     # Write debug files and exit the function for this job.
                     with open(os.path.join(job_dir, "final_schedule_info.json"), "w") as f:
@@ -1323,8 +1326,7 @@ async def scheduler(job_id: int, session: AsyncSession, input_file: str):
             nodes_data=nodes_data,
             live_vars_data=live_vars_data,
             func_footprints_data=func_footprints_data,
-            input_header=input_header,
-            input_data_rows=input_data_rows,
+            input_file=input_file,
             session=session
         )
         job_service = get_job_service(session)
@@ -1360,10 +1362,9 @@ async def main():
                 jobs = await job_service.get_jobs_not_scheduled()
                 print("Jobs:", jobs)
                 print(f"Found {len(jobs)} jobs to schedule")
-                for job in jobs:
-                    ## update job status to running after scheduler is done
-                    # Get the input file name from the job's relationship
 
+                if len(jobs) != 0:
+                    job = jobs[0]  # For simplicity, we take the first job
                     print(f"Job id: {job.job_id}")
                     input_data_service = get_input_data_service(session)
                     input_data = await input_data_service.get_input_data(job.job_id)
@@ -1372,17 +1373,27 @@ async def main():
                         input_file = str(input_data.input_data_id) + ".csv"
                         print(f" from scheduler Input file: {input_file}")
                         if job.job_type == JobType.complex:
-                          file_size = get_file_size(os.path.join(GROUPS_DIRECTORY_PATH, str(job.group_id)))
-                          await single_task_job_scheduler(job.group_id, job.job_id, input_data.input_data_id, file_size, job.required_ram, session)
+                            group_id = str(job.group_id)
+                            file_path = os.path.join(GROUPS_DIRECTORY_PATH, group_id, f"{group_id}.py")
+                            file_size = get_file_size(file_path)
+                            await single_task_job_scheduler(job.group_id, job.job_id, input_data.input_data_id, file_size, job.required_ram, session)                          
+                            # result= await single_task_job_scheduler(job.group_id, job.job_id, input_data.input_data_id, file_size, job.required_ram, session)
+                            # if result:
+                            #     job_service = get_job_service(session)
+                            #     job_service.update_job_status(job.job_id, JobStatus.running)
                         else:
                             await scheduler(job.job_id, session, input_file)
+                            # result = await scheduler(job.job_id, session, input_file)
+                            # if result:
+                            #     job_service = get_job_service(session)
+                            #     job_service.update_job_status(job.job_id, JobStatus.running)
                     else:
                         print(f"No input data found for job {job.job_id}")
 
             except Exception as e:
                 print(traceback.format_exc())
                 print(f"Error: {e}")
-            await asyncio.sleep(10)
+            await asyncio.sleep(0.5)
 
 if __name__ == "__main__":
     asyncio.run(main())
