@@ -1,7 +1,7 @@
 from app.db.repositories.task import TaskRepository
 from app.schemas.task import TaskCreate, TaskUpdate, TaskStatus, TaskDataWithNodeInfo, TaskOutputDependentInfo
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.db.models.scheme import Task, Data, DataStatus, Node
+from app.db.models.scheme import Task, Data, DataStatus, Node, JobStatus
 from typing import List
 import logging
 from protos import master_pb2, worker_pb2
@@ -48,13 +48,15 @@ class TaskService:
     
     async def _update_status(self, task: Task):
         # Update status of all output files to completed
+        logging.info(f"Updating status of task {task.task_id} to completed")
         for data in task.data_files:
             data.status = DataStatus.completed
 
-        task.status = TaskStatus.completed
+        task.status = TaskStatus.completed 
         await self.task_repo.update(task)
     
     async def _notify_dependents(self, task: Task):
+        logging.info(f"Notifying dependents of task {task.task_id}")
         worker_client = WorkerClient()
         dependents_info = await self.get_task_output_dependencies_with_node_info(task.task_id)
         await self.task_repo.session.refresh(task, ['node'])
@@ -77,22 +79,23 @@ class TaskService:
                 logging.error(f"Failed to notify dependent task: {dependent.dependent_task_id}")
                 continue
 
+    
     async def complete_task(self, completion_info: master_pb2.TaskCompleteRequest) -> bool:
         try:
             task = await self.task_repo.get_task_with_data_files(completion_info.task_id)
             if not task:
                 logging.error(f"Task not found: {completion_info.task_id}")
-                return False
+                return None, None
             
             await self._update_status(task)
             await self._notify_dependents(task)
-            #TODO: if job is completed, update job status to completed
-            #TODO: if job completed, get output data and aggregate them into a single file
-            return True
+
+            return task.job_id
+
         except Exception as e:
             print(traceback.format_exc())
             logging.error(f"Error completing task: {e}")
-            return False
+            return None, None
         
     async def get_total_node_ram(self, node_id: int) -> int:
         tasks = await self.task_repo.get_running_tasks_by_node_id(node_id)

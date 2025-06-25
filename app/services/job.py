@@ -9,9 +9,13 @@ from app.utils.utils import Create_directory, save_file
 import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.utils.constants import JOBS_DIRECTORY_PATH
-from app.db.models.scheme import JobStatus, JobType
-from app.utils.utils import validate_file
+from app.db.models.scheme import JobStatus, JobType, TaskStatus 
+from app.utils.utils import validate_file, get_data_path
+from app.services.worker_client import WorkerClient
 import traceback
+from protos import common_pb2
+import logging
+
 class JobService:
     def __init__(self, job_repo: JobRepository):
         self.job_repo = job_repo
@@ -78,6 +82,49 @@ class JobService:
         except Exception as e:
             print(traceback.format_exc())
             raise HTTPException(status_code=500, detail=str(e))
-    
+        
+    async def download_output_data(self, job_id: int):
+        try: 
+            logging.info(f"Downloading job {job_id} output data")
+            job = await self.job_repo.get_job_with_output_node(job_id)
+            logging.info(f"Job {job_id} output data: {job}")
+            if not job:
+                raise HTTPException(status_code=404, detail="Job not found")
+                    
+            worker_client = WorkerClient()
+            data_identifier = common_pb2.DataIdentifier(
+                data_id=job.output_data_file.data_id,
+            )   
+            output_data_file = job.output_data_file
+            node = output_data_file.parent_task.node
+            await worker_client.stream_data(
+                data_identifier,
+                node.ip_address,
+                node.port,
+                get_data_path(output_data_file.file_name, job_id)
+            )
+            await self.job_repo.update_job_status(job_id, JobStatus.downloadable)
+        except Exception as e:
+            print(traceback.format_exc())
+            raise HTTPException(status_code=500, detail=str(e))
+
+    async def update_job_after_task_completion(self, job_id: int):
+        try:
+            logging.info(f"Updating job {job_id} after task completion")
+            job = await self.job_repo.get_job_with_tasks(job_id)
+            all_tasks_completed = True
+            for task in job.tasks:
+                if task.status != TaskStatus.completed:
+                    all_tasks_completed = False
+                    break
+
+            logging.info(f"Job {job_id} all tasks completed: {all_tasks_completed}")
+            if all_tasks_completed:
+                await self.download_output_data(job_id)
+                await self.update_job_status(job_id, JobStatus.completed)
+            
+        except Exception as e:
+            print(traceback.format_exc())
+            raise HTTPException(status_code=500, detail=str(e))
 def get_job_service(session: AsyncSession) -> JobService:
     return JobService(JobRepository(session))

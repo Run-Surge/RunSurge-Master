@@ -13,10 +13,12 @@ from app.db.session import get_db_context
 from app.schemas.node import  NodeRegisterGRPC, NodeUpdateGRPC    
 from app.schemas.user import UserLoginCreate
 from app.services.node import get_node_service
+from app.services.job import get_job_service
 from gRPCApp.utils import parse_grpc_peer_address
 from app.services.task import get_task_service
 from app.services.data import get_data_service
 from app.utils.utils import format_bytes
+from app.db.models.scheme import JobStatus
 
 class MasterServicer(master_pb2_grpc.MasterServiceServicer):
     """gRPC servicer implementation for MasterService."""
@@ -61,8 +63,11 @@ class MasterServicer(master_pb2_grpc.MasterServiceServicer):
         try:
             async with get_db_context() as session:
                 task_service = get_task_service(session)
-                await task_service.complete_task(request)
+                job_id = await task_service.complete_task(request)
                 
+                job_service = get_job_service(session)
+                await job_service.update_job_after_task_completion(job_id)
+
         except Exception as e:
             self.logger.error(f"Error in TaskComplete: {e}")
             return common_pb2.StatusResponse(success=False, message=str(e))
