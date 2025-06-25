@@ -245,7 +245,8 @@ def get_memory_foortprint(file_path, entry_point, functions,job_id,input_data_id
                     full_index_expr = match.group(1)  # e.g., numeric_data[0]
                     var_name = full_index_expr.split('[')[0]  # Extract base variable name, e.g., numeric_data
                     if var_name in local_parser.vars:
-                        length = str(local_parser.vars[var_name][0])  # Convert to string
+                        # length = str(local_parser.vars[var_name][0])  # Convert to string
+                        length=420
                         # Replace only the matched part
                         modified_code = code[:match.start()] + str(length) + code[match.end():]
                         print(f"Modified code: {modified_code}")  # Debugging: print the modified code
@@ -417,7 +418,6 @@ def Parallelizer(path,job_id,input_data_id):
     SAVE_PATH = f"Jobs/{job_id}"
     print(f"Parallelizing {path}")
     error_file = "errors.txt"
-    print("I am running")
     filename=path
     if not os.path.exists(filename):
         print(f"File {filename} does not exist.")

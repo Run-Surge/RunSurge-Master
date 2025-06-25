@@ -3,7 +3,8 @@ import os
 from fastapi import UploadFile
 from app.db.models.scheme import Node, Data 
 from fastapi import HTTPException
-from app.utils.constants import FILE_SIZE_LIMIT, DATA_CHUNK_SIZE_LIMIT, ZIP_FILE_CHUNK_SIZE_LIMIT
+from app.utils.constants import FILE_SIZE_LIMIT, DATA_CHUNK_SIZE_LIMIT, ZIP_FILE_CHUNK_SIZE_LIMIT,GROUPS_DIRECTORY_PATH,JOBS_DIRECTORY_PATH
+import shutil
 
 def Create_directory(path: str):
     if not os.path.exists(path):
@@ -65,3 +66,9 @@ def format_bytes(bytes: int) -> str:
     
 def get_file_size(path: str) -> int:
     return os.path.getsize(path)
+
+def clean_up_files():
+    if os.path.exists(GROUPS_DIRECTORY_PATH):
+        shutil.rmtree(GROUPS_DIRECTORY_PATH)
+    if os.path.exists(JOBS_DIRECTORY_PATH):
+        shutil.rmtree(JOBS_DIRECTORY_PATH)
