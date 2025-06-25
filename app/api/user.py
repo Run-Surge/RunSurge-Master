@@ -34,7 +34,7 @@ async def get_user_jobs(
         raise HTTPException(status_code=401, detail="Authentication required")
     
     job_service = get_job_service(session)
-    jobs = await job_service.get_user_jobs(current_user["user_id"])
+    jobs = await job_service.get_simple_user_jobs(current_user["user_id"])
     return {
         "jobs": [JobRead(
             job_id=job.job_id,

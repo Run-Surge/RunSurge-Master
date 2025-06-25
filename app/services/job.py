@@ -1,5 +1,5 @@
 from app.db.repositories.job import JobRepository
-from app.schemas.job import JobCreate
+from app.schemas.job import JobCreate, ComplexJobCreate
 from app.db.models.scheme import Job
 from fastapi import Depends, HTTPException
 from app.db.repositories.job import get_job_repository
@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.utils.constants import JOBS_DIRECTORY_PATH
 from app.db.models.scheme import JobStatus, JobType
 from app.utils.utils import validate_file
+import traceback
 class JobService:
     def __init__(self, job_repo: JobRepository):
         self.job_repo = job_repo
@@ -45,8 +46,8 @@ class JobService:
     async def update_job(self, job_id: int, job: Job):
         return await self.job_repo.update_job(job_id, job)
     
-    async def get_user_jobs(self, user_id: int):
-        return await self.job_repo.get_jobs_by_user(user_id)
+    async def get_simple_user_jobs(self, user_id: int):
+        return await self.job_repo.get_simple_user_jobs(user_id)
     
     async def get_jobs_not_scheduled(self):
         return await self.job_repo.get_pending_jobs()
@@ -60,6 +61,20 @@ class JobService:
             raise HTTPException(status_code=404, detail="Job not found")
         if job.status != JobStatus.submitted:
             raise HTTPException(status_code=400, detail="Job is already running or completed")
+    async def create_complex_job(self, user_id: int, job_name: str, job_type: JobType, group_id: int, script_path: str):
+        try:
+            job_data = ComplexJobCreate(
+                user_id=user_id,
+                job_name=job_name,
+                job_type=job_type,
+                group_id=group_id,
+                script_path=script_path
+                )
+            job = await self.job_repo.create_complex_job(job_data)
+            return job
+        except Exception as e:
+            print(traceback.format_exc())
+            raise HTTPException(status_code=500, detail=str(e))
     
 def get_job_service(session: AsyncSession) -> JobService:
     return JobService(JobRepository(session))

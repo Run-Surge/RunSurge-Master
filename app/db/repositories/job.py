@@ -1,8 +1,8 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import select
-from app.db.models.scheme import Job, JobStatus
+from app.db.models.scheme import Job, JobStatus, JobType
 from app.db.repositories.base import BaseRepository
-from app.schemas.job import JobCreate
+from app.schemas.job import JobCreate, ComplexJobCreate
 from typing import List, Optional
 from fastapi import Depends
 from app.db.session import get_db
@@ -21,8 +21,8 @@ class JobRepository(BaseRepository[Job]):
         
         return await self.create(job)
 
-    async def get_jobs_by_user(self, user_id: int) -> List[Job]:
-        statement = select(Job).where(Job.user_id == user_id)
+    async def get_simple_user_jobs(self, user_id: int) -> List[Job]:
+        statement = select(Job).where(Job.user_id == user_id, Job.job_type == JobType.simple)
         result = await self.session.execute(statement)
         return result.scalars().all()
 
@@ -50,6 +50,15 @@ class JobRepository(BaseRepository[Job]):
         result = await self.session.execute(statement)
         return result.scalar_one_or_none()
     
+    async def create_complex_job(self, job_data: ComplexJobCreate) -> Job:
+        job = Job(
+            user_id=job_data.user_id,
+            job_name=job_data.job_name,
+            job_type=job_data.job_type,
+            group_id=job_data.group_id, 
+            script_path=job_data.script_path
+        )
+        return await self.create(job)
 
 async def get_job_repository(session: AsyncSession = Depends(get_db)) -> JobRepository:
     return JobRepository(session)

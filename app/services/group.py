@@ -14,8 +14,9 @@ class GroupService:
             file_name = file.filename.split(".")[0]
             group = await self.group_repo.create_group(group_name, file_name, num_of_jobs, user_id)
             Create_directory(f"{GROUPS_DIRECTORY_PATH}/{group.group_id}")
-            save_file(file, f"{GROUPS_DIRECTORY_PATH}/{group.group_id}/{group.group_id}.py")
-            return group
+            path = f"{GROUPS_DIRECTORY_PATH}/{group.group_id}/{group.group_id}.py"
+            save_file(file, path)
+            return group, path
         except Exception as e:
             print(e)
             raise HTTPException(status_code=500, detail=str(e))

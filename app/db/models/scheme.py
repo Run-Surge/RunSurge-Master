@@ -122,10 +122,14 @@ class Job(Base):
     job_type = Column(SQLEnum(JobType))
     status = Column(SQLEnum(JobStatus), default=JobStatus.submitted)
     created_at = Column(DateTime, default=datetime.now)
-    script_name = Column(String)
+    script_name = Column(String, nullable=True)
     script_path = Column(String, nullable=True)
     output_data_id = Column(Integer, ForeignKey("data.data_id"), nullable=True)
+
+    #### FOR Complex Job ####
     group_id = Column(Integer, ForeignKey("group.group_id"), nullable=True)
+    required_ram = Column(BIGINT, nullable=True)
+
     # Relationships
     user = relationship("User", back_populates="jobs")
     tasks = relationship("Task", back_populates="job")
@@ -136,10 +140,10 @@ class InputData(Base):
     __tablename__ = "input_data"
     input_data_id = Column(Integer, primary_key=True, autoincrement=True)
     job_id = Column(Integer, ForeignKey("job.job_id"))
-    created_at = Column(DateTime, default=datetime.now)
     chunk_index = Column(Integer)
     total_chunks = Column(Integer)
     file_name = Column(String)
+    created_at = Column(DateTime, default=datetime.now)
 
     # Relationships
     job = relationship("Job", back_populates="input_data_files")

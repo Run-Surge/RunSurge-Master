@@ -10,6 +10,12 @@ class JobCreate(BaseModel):
     job_type: JobType
     script_name: str
 
+class ComplexJobCreate(BaseModel):
+    user_id: int
+    job_name: str
+    job_type: JobType
+    group_id: int
+    script_path: str
 class JobUpdate(JobBase):
     pass
 
@@ -19,7 +25,14 @@ class JobRead(JobBase):
     created_at: datetime
     job_name: str
     job_type: JobType
-    script_name: str
+    script_name: Optional[str] = None
 
 class JobDetailRead(JobRead):
     input_file_name: str
+
+class ComplexJobRead(BaseModel):
+    group_id: int
+    job_id: int
+    job_name: Optional[str] = None
+    status: Optional[JobStatus] = None
+    created_at: Optional[datetime] = None
