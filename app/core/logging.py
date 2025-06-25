@@ -37,7 +37,7 @@ def setup_logging(service_name: str) -> logging.Logger:
     
     # Console handler
     console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setLevel(logging.INFO)
+    console_handler.setLevel(logging.DEBUG)
     console_handler.setFormatter(console_formatter)
     
     # File handler
