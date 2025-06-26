@@ -24,13 +24,13 @@ class DataService:
 
     async def get_data_path(self, data_id: int):
         data = await self.data_repo.get_by_id(data_id)
-        job_id = await self.data_repo.get_data_job_id_by_parent_task(data_id)
-        if job_id is not None:
-            return get_data_path(data.file_name, job_id)
+        job = await self.data_repo.get_data_job_by_parent_task(data_id)
+        if job is not None:
+            return get_data_path(data.file_name, job)
         
-        job_id = await self.data_repo.get_data_job_id_by_dependent_tasks(data_id)
-        if job_id is not None:
-            return get_data_path(data.file_name, job_id)
+        job = await self.data_repo.get_data_job_by_dependent_tasks(data_id)
+        if job is not None:
+            return get_data_path(data.file_name, job)
         
         raise Exception("Data has no parent task or dependent tasks, Can't determine job id")
 

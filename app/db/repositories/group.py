@@ -1,7 +1,7 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models.scheme import Group, Job
 from sqlalchemy import select
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import selectinload, joinedload
 from app.db.repositories.base import BaseRepository
 
 class GroupRepository(BaseRepository[Group]):
@@ -21,3 +21,8 @@ class GroupRepository(BaseRepository[Group]):
         statement = select(Group).options(selectinload(Group.jobs), selectinload(Group.output_data_file)).where(Group.group_id == group_id)
         result = await self.session.execute(statement)
         return result.scalar_one_or_none()
+    
+    async def get_group_with_jobs(self, group_id: int):
+        statement = select(Group).options(joinedload(Group.jobs)).where(Group.group_id == group_id)
+        result = await self.session.execute(statement)
+        return result.unique().scalar_one_or_none()

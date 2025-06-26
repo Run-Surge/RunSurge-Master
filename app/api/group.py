@@ -152,9 +152,9 @@ async def get_group_result(
         raise HTTPException(status_code=403, detail="Forbidden")
     if group.status != GroupStatus.completed:
         raise HTTPException(status_code=400, detail="Group is not completed yet")
-    file_path = os.path.join(GROUPS_DIRECTORY_PATH, str(group_id), f"{group.output_data_file.file_name}")
+    file_path = os.path.join(GROUPS_DIRECTORY_PATH, str(group_id), f"group_output.zip")
     return FileResponse(
         path=file_path,
-        filename=f"{group.output_data_file.file_name}",
+        filename=f"group_output.zip",
         media_type="application/zip"
     )

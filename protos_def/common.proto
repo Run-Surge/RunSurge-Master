@@ -31,6 +31,7 @@ message DataMetadata {
   string hash = 6;
   bool is_on_master = 7;
   int64 task_id = 8;
+  bool is_zipped = 9;
 }
 // Chunk of data for streaming
 message DataChunk {

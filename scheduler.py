@@ -977,7 +977,7 @@ if __name__ == "__main__":
                 var = key.split(":")[0]
                 notification = worker_pb2.DataNotification(
                     task_id=current_task_id, data_id=var_to_data_id_map[var], data_name=input_file,
-                    ip_address=settings.GRPC_IP, port=settings.GRPC_PORT, hash=""
+                    ip_address=settings.GRPC_IP, port=settings.GRPC_PORT, hash="", is_zipped=False
                 )
                 notify_success = await worker_client.notify_data(notification, ip_address, port)
                 if notify_success:
@@ -1381,13 +1381,13 @@ async def main():
                     input_data = await input_data_service.get_input_data(job.job_id)
                     print(f"Input data: {input_data}")
                     if input_data:
-                        input_file = str(input_data.input_data_id) + ".csv"
+                        input_file = str(input_data.input_data_id)
                         print(f" from scheduler Input file: {input_file}")
                         if job.job_type == JobType.complex:
                             group_id = str(job.group_id)
                             file_path = os.path.join(GROUPS_DIRECTORY_PATH, group_id, f"{group_id}.py")
                             file_size = get_file_size(file_path)
-                            await single_task_job_scheduler(job.group_id, job.job_id, input_data.input_data_id, file_size, job.required_ram, session)                          
+                            await single_task_job_scheduler(job.group_id, job.job_id, input_file + '.zip', file_size, job.required_ram, session)                          
                             # result= await single_task_job_scheduler(job.group_id, job.job_id, input_data.input_data_id, file_size, job.required_ram, session)
                             # if result:
                             #     job_service = get_job_service(session)

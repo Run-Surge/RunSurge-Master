@@ -25,17 +25,25 @@ from protos import worker_pb2
 from app.core.config import Settings
 import traceback
 from sqlalchemy.types import BigInteger
+from app.utils.constants import GROUPS_DIRECTORY_PATH
 settings = Settings()
 input_file = None
 
 # input to single task job scheduler
 # job_id, input_data_id, input_filename, peak_memory, session
 
+async def read_python_file_bytes(file_path: str) -> bytes:
+    if not os.path.exists(file_path):
+        print(f"  -> FATAL ERROR: File {file_path} does not exist.")
+        return ""
+    
+    with open(file_path, 'rb') as f:
+        return f.read()
 
 async def single_task_job_scheduler(
     group_id: int,
     job_id: int,
-    input_data_id: int,
+    input_file_name: str,
     input_file_size: BigInteger,
     peak_memory: BigInteger,
     session: AsyncSession,
@@ -90,7 +98,8 @@ async def single_task_job_scheduler(
 
     # --- 3. Create Task and Output Data Records in DB ---
     data_service = get_data_service(session)
-    
+    input_data_obj = await data_service.create_data(file_name=input_file_name, parent_task_id=None)
+    input_data_id = input_data_obj.data_id
     created_task_obj = await task_service.create_task(
         job_id=job_id, data_ids=[input_data_id],
         required_ram=peak_memory, node_id=assigned_node_id
@@ -99,32 +108,33 @@ async def single_task_job_scheduler(
     created_task_id = created_task_obj.task_id
     print(f"  -> Created Task with ID: {created_task_id}")
 
-    output_filename = "output.zip"
+    output_filename = f"output_{job_id}.zip"
     output_data_obj = await data_service.create_data(
         file_name=output_filename,
         parent_task_id=created_task_id
     )
     # --- ### CORRECTION ###: Extract the ID immediately ---
     output_data_id = output_data_obj.data_id
+    job_service = get_job_service(session)
+    await job_service.update_job_output_data_id(job_id, output_data_id)
     print(f"  -> Created Output Data record with ID: {output_data_id}")
     
 #     # --- 4. Prepare for Task Assignment ---
 #     task_script_name = f"task_{created_task_id}_simple_job.py"
-    script_content = f"""
-print("Executing pre-defined simple job logic for task {created_task_id}")
-"""
-    script_content_bytes = script_content.encode('utf-8')
+    script_path = os.path.join(GROUPS_DIRECTORY_PATH, str(group_id), str(group_id) + ".py")
+    print(f"  -> Script path: {script_path}")
+    script_content_bytes = await read_python_file_bytes(script_path)
     
     output_data_infos = [
         worker_pb2.OutputDataInfo(
             data_id=output_data_id,
-            data_name=output_filename
+            data_name='output.zip'
         )
     ]
 
     task_assignment_message = worker_pb2.TaskAssignment(
         task_id=created_task_id, python_file=script_content_bytes,
-        python_file_name=str(group_id), required_data_ids=[input_data_id],
+        python_file_name=os.path.basename(script_path), required_data_ids=[input_data_id],
         output_data_infos=output_data_infos, job_id=job_id
     )
 
@@ -140,8 +150,8 @@ print("Executing pre-defined simple job logic for task {created_task_id}")
         print(f"    -> Notifying {node_name} that initial data '{group_id}' is ready.")
         notification = worker_pb2.DataNotification(
             task_id=created_task_id, data_id=input_data_id,
-            data_name=str(group_id), ip_address=settings.GRPC_IP,
-            port=settings.GRPC_PORT, hash=""
+            data_name=input_file_name, ip_address=settings.GRPC_IP,
+            port=settings.GRPC_PORT, hash="", is_zipped=True
         )
         notify_success = await worker_client.notify_data(notification, ip_address, port)
         if notify_success:

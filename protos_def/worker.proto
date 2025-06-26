@@ -60,6 +60,7 @@ message DataNotification {
   string ip_address = 4;
   int32 port = 5;
   string hash = 6;
+  bool is_zipped = 7;
 }
 
 service WorkerService {

@@ -1,9 +1,10 @@
 
 import os
 from fastapi import UploadFile
-from app.db.models.scheme import Node, Data 
+from app.db.models.scheme import Node, Job, JobType
 from fastapi import HTTPException
 from app.utils.constants import FILE_SIZE_LIMIT, DATA_CHUNK_SIZE_LIMIT, ZIP_FILE_CHUNK_SIZE_LIMIT,GROUPS_DIRECTORY_PATH,JOBS_DIRECTORY_PATH
+from app.utils.constants import GROUPS_DIRECTORY_PATH, JOBS_DIRECTORY_PATH
 import shutil
 
 def Create_directory(path: str):
@@ -51,8 +52,11 @@ def convert_nodes_into_Json(data: list[Node]):
     return nodes_list, node_map
 
 
-def get_data_path(file_name: str, job_id: int):
-    return os.path.join('Jobs', str(job_id), file_name)
+def get_data_path(file_name: str, job: Job):
+    if job.job_type == JobType.complex:
+        return os.path.join(GROUPS_DIRECTORY_PATH, str(job.group_id), file_name)
+    else:
+        return os.path.join(JOBS_DIRECTORY_PATH, str(job.job_id), file_name)
 
 def format_bytes(bytes: int) -> str:
     if bytes < 1024:

@@ -20,6 +20,7 @@ import os
 class JobService:
     def __init__(self, job_repo: JobRepository):
         self.job_repo = job_repo
+        self.logger = logging.getLogger(__name__)
     async def create_job_with_script(
         self, 
         user_id: int,
@@ -86,9 +87,9 @@ class JobService:
         
     async def download_output_data(self, job_id: int):
         try: 
-            logging.info(f"Downloading job {job_id} output data")
+            self.logger.info(f"Downloading job {job_id} output data")
             job = await self.job_repo.get_job_with_output_node(job_id)
-            logging.info(f"Job {job_id} output data: {job}")
+            self.logger.info(f"Job {job_id} output data: {job}")
             if not job:
                 raise HTTPException(status_code=404, detail="Job not found")
                     
@@ -102,16 +103,16 @@ class JobService:
                 data_identifier,
                 node.ip_address,
                 node.port,
-                get_data_path(output_data_file.file_name, job_id)
+                get_data_path(output_data_file.file_name, job)
             )
             await self.job_repo.update_job_status(job_id, JobStatus.completed)
         except Exception as e:
             print(traceback.format_exc())
             raise HTTPException(status_code=500, detail=str(e))
 
-    async def update_job_after_task_completion(self, job_id: int):
+    async def update_job_after_task_completion(self, job_id: int) -> int:
         try:
-            logging.info(f"Updating job {job_id} after task completion")
+            self.logger.info(f"Updating job {job_id} after task completion")
             job = await self.job_repo.get_job_with_tasks(job_id)
             all_tasks_completed = True
             for task in job.tasks:
@@ -119,10 +120,13 @@ class JobService:
                     all_tasks_completed = False
                     break
 
-            logging.info(f"Job {job_id} all tasks completed: {all_tasks_completed}")
+            self.logger.info(f"Job {job_id} all tasks completed: {all_tasks_completed}")
+            group_id = job.group_id
             if all_tasks_completed:
                 await self.download_output_data(job_id)
                 await self.update_job_status(job_id, JobStatus.completed)
+
+            return group_id
             
         except Exception as e:
             print(traceback.format_exc())
