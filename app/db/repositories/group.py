@@ -17,7 +17,7 @@ class GroupRepository(BaseRepository[Group]):
         result = await self.session.execute(statement)
         return result.scalars().all()
     
-    async def get_group_by_id(self, group_id: int, user_id: int):
-        statement = select(Group).options(selectinload(Group.jobs)).where(Group.group_id == group_id, Group.user_id == user_id)
+    async def get_group_by_id(self, group_id: int):
+        statement = select(Group).options(selectinload(Group.jobs), selectinload(Group.output_data_file)).where(Group.group_id == group_id)
         result = await self.session.execute(statement)
         return result.scalar_one_or_none()

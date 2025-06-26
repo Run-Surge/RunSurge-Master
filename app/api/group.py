@@ -10,9 +10,10 @@ from typing import List
 import traceback
 from app.utils.utils import append_chunk_to_zip_file, validate_zip_file_chunk
 from app.services.data import get_input_data_service
-from app.db.models.scheme import JobStatus
+from app.db.models.scheme import JobStatus, GroupStatus
 import os
 from app.utils.constants import GROUPS_DIRECTORY_PATH
+from fastapi.responses import FileResponse
 
 router = APIRouter()
 
@@ -48,7 +49,7 @@ async def create_group(
                 group_id=group_id,
             )
         # Refresh group to include the newly created jobs
-        group = await group_service.get_group_by_id(group_id, current_user["user_id"])
+        group = await group_service.get_group_by_id(group_id)
         return group
     except Exception as e:
         print(traceback.format_exc())
@@ -65,7 +66,7 @@ async def get_group_by_id(
         raise HTTPException(status_code=401, detail="Unauthorized")
     try:
         group_service = get_group_service(session)
-        group = await group_service.get_group_by_id(group_id=group_id, user_id=current_user["user_id"])
+        group = await group_service.get_group_by_id(group_id=group_id)
         if not group:
             raise HTTPException(status_code=404, detail="Group not found")
         for job in group.jobs:
@@ -135,3 +136,25 @@ async def upload_zip_file(
     except Exception as e:
         print(e)
         raise HTTPException(status_code=500, detail=str(e))
+    
+
+@router.get("/{group_id}/result")
+async def get_group_result(
+    group_id: int,
+    session: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user_from_cookie)
+):
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    group_service = get_group_service(session)
+    group = await group_service.get_group_by_id(group_id=group_id)
+    if group.user_id != current_user["user_id"]:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    if group.status != GroupStatus.completed:
+        raise HTTPException(status_code=400, detail="Group is not completed yet")
+    file_path = os.path.join(GROUPS_DIRECTORY_PATH, str(group_id), f"{group.output_data_file.file_name}")
+    return FileResponse(
+        path=file_path,
+        filename=f"{group.output_data_file.file_name}",
+        media_type="application/zip"
+    )
