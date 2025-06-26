@@ -1,12 +1,13 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import select
-from app.db.models.scheme import Job, JobStatus, JobType
+from app.db.models.scheme import Job, JobStatus, JobType, Data, Task
 from app.db.repositories.base import BaseRepository
 from app.schemas.job import JobCreate, ComplexJobCreate
 from typing import List, Optional
 from fastapi import Depends
 from app.db.session import get_db
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload
 
 class JobRepository(BaseRepository[Job]):
     def __init__(self, session: AsyncSession):
@@ -68,6 +69,23 @@ class JobRepository(BaseRepository[Job]):
             group_id=job_data.group_id, 
         )
         return await self.create(job)
+
+    async def get_job_with_output_node(self, job_id: int) -> Optional[Job]:
+        statement = (
+            select(Job).where(Job.job_id == job_id)
+            .options(
+                joinedload(Job.output_data_file)
+                .joinedload(Data.parent_task)
+                .joinedload(Task.node)
+                )   
+        )
+        result = await self.session.execute(statement)
+        return result.unique().scalar_one_or_none()
+
+    async def get_job_with_tasks(self, job_id: int) -> Optional[Job]:
+        statement = select(Job).where(Job.job_id == job_id).options(joinedload(Job.tasks))
+        result = await self.session.execute(statement)
+        return result.unique().scalar_one_or_none()
 
 async def get_job_repository(session: AsyncSession = Depends(get_db)) -> JobRepository:
     return JobRepository(session)

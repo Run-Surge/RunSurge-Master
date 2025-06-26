@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import select
 from sqlalchemy.dialects import postgresql
-from app.db.models.scheme import Task, Data, Node, TaskDataDependency, TaskStatus
+from app.db.models.scheme import Task, Data, Node, TaskDataDependency, TaskStatus, Job
 from app.schemas.task import TaskCreate, TaskUpdate, TaskDataWithNodeInfo, TaskOutputDependentInfo
 from app.db.repositories.base import BaseRepository
 from fastapi import Depends
@@ -88,7 +88,9 @@ class TaskRepository(BaseRepository[Task]):
     async def get_task_with_data_files(self, task_id: int):
         query = (
             select(Task)
-            .options(joinedload(Task.data_files))
+            .options(
+                joinedload(Task.data_files)
+            )
             .where(Task.task_id == task_id)
         )
         result = await self.session.execute(query)
