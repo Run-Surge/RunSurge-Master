@@ -116,6 +116,7 @@ class Group(Base):
     group_id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("user.user_id"))
 
+
     group_name = Column(String)
     python_file_name = Column(String)
     aggregator_file_name = Column(String)
@@ -123,10 +124,12 @@ class Group(Base):
     num_of_jobs = Column(Integer)
     created_at = Column(DateTime, default=datetime.now)
     status = Column(SQLEnum(GroupStatus), default=GroupStatus.submitted)
+    output_data_id = Column(Integer, ForeignKey("data.data_id"), nullable=True)
 
     # Relationships
     jobs = relationship("Job", back_populates="group")
     user = relationship("User", back_populates="groups")
+    output_data_file = relationship("Data", back_populates="parent_group", uselist=False)
 
 class Job(Base):
     __tablename__ = "job"
@@ -177,7 +180,7 @@ class Data(Base):
     dependent_tasks = relationship("Task", secondary="task_data_dependency", back_populates="data_dependencies")
     parent_task = relationship("Task", back_populates="data_files")  # The task this data file is its output
     parent_job = relationship("Job", back_populates="output_data_file")  # The job this data file is its output
-    
+    parent_group = relationship("Group", back_populates="output_data_file")  # The group this data file is its output
 
 
     

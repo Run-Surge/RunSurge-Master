@@ -29,8 +29,8 @@ class GroupService:
     async def get_groups_by_user_id(self, user_id: int):
         return await self.group_repo.get_groups_by_user_id(user_id)
 
-    async def get_group_by_id(self, group_id: int, user_id: int):
-        return await self.group_repo.get_group_by_id(group_id, user_id)
+    async def get_group_by_id(self, group_id: int):
+        return await self.group_repo.get_group_by_id(group_id)
 
 def get_group_service(session: AsyncSession) -> GroupService:
     return GroupService(GroupRepository(session))
