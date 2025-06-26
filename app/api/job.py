@@ -13,6 +13,8 @@ from app.utils.constants import JOBS_DIRECTORY_PATH
 from Parallelization.Parallelizer import Parallelizer
 from app.services.data import get_input_data_service
 from app.utils.utils import append_chunk_to_file, validate_data_chunk
+from app.services.data import get_data_service
+from fastapi.responses import FileResponse
 router = APIRouter()
 
 @router.post("/", response_model=JobRead)
@@ -113,3 +115,25 @@ async def upload_data(
 
 #-------------------------------------------------Complex Job-------------------------------------------------
 
+
+@router.get("/{job_id}/result")
+async def get_job_result(
+    job_id: int,
+    session: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user_from_cookie)
+):
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    job_service = get_job_service(session)
+    job = await job_service.get_job(job_id)
+    if job.user_id != current_user["user_id"]:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    result_path = await job_service.get_output_file_path(job_id)
+    if not os.path.exists(result_path):
+        raise HTTPException(status_code=404, detail="Result file not found")
+    return FileResponse(
+        path=result_path,
+        media_type="text/csv",
+        filename=f"job_{job_id}_result.csv"
+    )
+    

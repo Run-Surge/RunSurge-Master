@@ -15,6 +15,7 @@ from app.services.worker_client import WorkerClient
 import traceback
 from protos import common_pb2
 import logging
+import os
 
 class JobService:
     def __init__(self, job_repo: JobRepository):
@@ -126,5 +127,14 @@ class JobService:
         except Exception as e:
             print(traceback.format_exc())
             raise HTTPException(status_code=500, detail=str(e))
+        
+    async def get_output_file_path(self, job_id: int):
+        job = await self.job_repo.get_job(job_id)
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+        if job.status != JobStatus.completed:
+            raise HTTPException(status_code=400, detail="Job is not completed yet")        
+        return os.path.join(JOBS_DIRECTORY_PATH, str(job_id), job.output_data_file.file_name)
+
 def get_job_service(session: AsyncSession) -> JobService:
     return JobService(JobRepository(session))
