@@ -6,6 +6,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.services.job import get_job_service
 from app.services.node import get_node_service
 from app.schemas.job import JobRead
+from app.schemas.group import GroupRead
+from typing import List
+from app.services.group import get_group_service
+
 router = APIRouter()
 
 
@@ -66,6 +70,18 @@ async def get_user_nodes(
         "success": True
     }
 
-
+@router.get("/groups", response_model=List[GroupRead])
+async def get_groups(
+    session: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user_from_cookie)
+):
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    try:
+        group_service = get_group_service(session)
+        groups = await group_service.get_groups_by_user_id(user_id=current_user["user_id"])
+        return groups
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 

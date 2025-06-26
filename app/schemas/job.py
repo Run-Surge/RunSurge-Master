@@ -33,6 +33,7 @@ class JobDetailRead(JobRead):
 class ComplexJobRead(BaseModel):
     group_id: int
     job_id: int
-    job_name: Optional[str] = None
-    status: Optional[JobStatus] = None
-    created_at: Optional[datetime] = None
+    status: JobStatus
+
+class ComplexJobDetailRead(ComplexJobRead):
+    input_file_name: str

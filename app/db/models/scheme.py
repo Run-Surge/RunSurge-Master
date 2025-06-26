@@ -48,6 +48,18 @@ class JobType(str, Enum):
     simple = 'simple'
     complex = 'complex'     
 
+## Group Status
+## submitted: not all jobs data files are uploaded
+## running: all the jobs data files are uploaded and at least one job is running
+## completed: all Jobs are completed and the aggregator is executed
+## failed: at least one Job is failed
+
+class GroupStatus(str, Enum):
+    submitted = 'submitted'
+    running = 'running'
+    completed = 'completed'
+    failed = 'failed'
+
 class User(Base):
     __tablename__ = "user"
     
@@ -106,8 +118,11 @@ class Group(Base):
 
     group_name = Column(String)
     python_file_name = Column(String)
+    aggregator_file_name = Column(String)
+    aggregator_file_path = Column(String)
     num_of_jobs = Column(Integer)
     created_at = Column(DateTime, default=datetime.now)
+    status = Column(SQLEnum(GroupStatus), default=GroupStatus.submitted)
 
     # Relationships
     jobs = relationship("Job", back_populates="group")
