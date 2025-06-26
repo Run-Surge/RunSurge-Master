@@ -104,7 +104,7 @@ class JobService:
                 node.port,
                 get_data_path(output_data_file.file_name, job_id)
             )
-            await self.job_repo.update_job_status(job_id, JobStatus.downloadable)
+            await self.job_repo.update_job_status(job_id, JobStatus.completed)
         except Exception as e:
             print(traceback.format_exc())
             raise HTTPException(status_code=500, detail=str(e))
