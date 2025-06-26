@@ -135,6 +135,15 @@ class JobService:
         if job.status != JobStatus.completed:
             raise HTTPException(status_code=400, detail="Job is not completed yet")        
         return os.path.join(JOBS_DIRECTORY_PATH, str(job_id), job.output_data_file.file_name)
+    
+
+    async def update_job_output_data_id(self, job_id: int, data_id: int) -> bool:
+        try:
+            await self.job_repo.update_job_output_data_id(job_id, data_id)
+            return True
+        except Exception as e:
+            print(traceback.format_exc())
+            return False
 
 def get_job_service(session: AsyncSession) -> JobService:
     return JobService(JobRepository(session))

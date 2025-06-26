@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from sqlalchemy import select
+from sqlalchemy import select, update
 from app.db.models.scheme import Job, JobStatus, JobType, Data, Task
 from app.db.repositories.base import BaseRepository
 from app.schemas.job import JobCreate, ComplexJobCreate
@@ -86,6 +86,11 @@ class JobRepository(BaseRepository[Job]):
         statement = select(Job).where(Job.job_id == job_id).options(joinedload(Job.tasks))
         result = await self.session.execute(statement)
         return result.unique().scalar_one_or_none()
+
+    async def update_job_output_data_id(self, job_id: int, data_id: int):
+        update_statement = update(Job).where(Job.job_id == job_id).values(output_data_id=data_id)
+        await self.session.execute(update_statement)
+        await self.session.commit()
 
 async def get_job_repository(session: AsyncSession = Depends(get_db)) -> JobRepository:
     return JobRepository(session)

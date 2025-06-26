@@ -881,15 +881,26 @@ async def generate_sequential_assignment(
             task_python_code.append(f"    send_data('{output_var}', '{output_filename}', {var_to_data_id_map[output_var]}, {list(var_consumers[output_var])})")
     
     # --- ### NEW/MODIFIED ###: Logic for writing the final output file ---
+
     if block_idx == last_schedulable_block_idx:
         final_output_var = get_lhs_var(info["statements"][-1])
         final_output_filename = "output.csv"
+        db_data_obj = await data_service.create_data(file_name=final_output_filename, parent_task_id=current_task_id)
+        data_id = db_data_obj.data_id
+        job_service = get_job_service(session)
+        success = await job_service.update_job_output_data_id(job_id, data_id)
+        if not success:
+            print(f"  -> FAILED to update job output data id for job {job_id}")
+            return f"\n--- BLOCK {block_idx} (Task {current_task_id} on {node_name}) ---\n  - FAILED to update job output data id."
+        else:
+            print(f"  -> Successfully updated job output data id for job {job_id}")
+
         # 1. Define a temporary filename with a random component
         temp_output_filename = f"temp_output_{os.urandom(4).hex()}.csv"
         # 2. Construct full paths inside the job directory
         temp_output_filepath = os.path.join(temp_output_filename)
         final_output_filepath = os.path.join(final_output_filename)
-        output_data_infos.append({'data_id': -1, 'data_name': final_output_filename})
+        output_data_infos.append({'data_id': data_id, 'data_name': final_output_filename})
         # 3. Generate code to write to the temporary file first
         task_python_code.append(f"    print(f'--- This is the final task. Saving final result to temporary file. ---')")
         task_python_code.append(f"    with open(r'{temp_output_filepath}', 'w', newline='') as f: csv.writer(f).writerows({final_output_var})")
