@@ -5,6 +5,7 @@ from typing import Optional, List
 from fastapi import Depends
 from app.db.session import get_db
 from app.schemas.node import NodeRegisterGRPC
+from sqlalchemy.orm import joinedload
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models.scheme import Node
 
@@ -45,9 +46,9 @@ class NodeRepository(BaseRepository[Node]):
         return result.scalars().first()
 
     async def get_user_nodes(self, user_id: int) -> List[Node]:
-        statement = select(Node).where(Node.user_id == user_id)
+        statement = select(Node).where(Node.user_id == user_id).options(joinedload(Node.earnings),joinedload(Node.tasks))
         result = await self.session.execute(statement)
-        return result.scalars().all()
+        return result.scalars().unique().all()
 
 
     async def get_all_nodes(self) -> List[Node]:

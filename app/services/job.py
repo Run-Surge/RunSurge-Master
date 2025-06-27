@@ -17,6 +17,7 @@ from protos import common_pb2
 import os
 from app.db.repositories.payment import PaymentRepository
 from app.core.logging import setup_logging
+from datetime import datetime
 
 class JobService:
     def __init__(self, job_repo: JobRepository, payment_repo: PaymentRepository):
@@ -164,6 +165,25 @@ class JobService:
         except Exception as e:
             print(traceback.format_exc())
             return False
+
+    async def get_payment(self, job_id: int):
+        payment = await self.job_repo.get_payment(job_id)
+        if not payment:
+            return None
+        return payment
+    
+    async def pay_job(self, job_id: int):
+        payment = await self.job_repo.get_payment(job_id)
+        try:
+            if not payment:
+                raise HTTPException(status_code=404, detail="Payment not found")
+            payment.status = PaymentStatus.completed
+            payment.payment_date = datetime.now()
+            await self.job_repo.update_payment(payment)
+            return True
+        except Exception as e:
+            print(traceback.format_exc())
+            raise HTTPException(status_code=500, detail=str(e))
 
 def get_job_service(session: AsyncSession) -> JobService:
     return JobService(JobRepository(session), PaymentRepository(session))

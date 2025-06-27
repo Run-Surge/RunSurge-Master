@@ -130,6 +130,8 @@ class TaskService:
             total_ram += task.required_ram
         return total_ram
         
-
+    async def get_tasks_with_job_id(self, job_id: int) -> List[Task]:
+        return await self.task_repo.get_tasks_with_job_id(job_id)
+    
 def get_task_service(session: AsyncSession) -> TaskService:
     return TaskService(TaskRepository(session), EarningsRepository(session))

@@ -2,6 +2,8 @@ from pydantic import BaseModel, ConfigDict
 from datetime import datetime
 from typing import Optional
 from app.utils.constants import DEFAULT_PORT
+from app.db.models.scheme import EarningStatus
+from typing import List
 
 class NodeBase(BaseModel):
     node_name: str
@@ -9,11 +11,28 @@ class NodeBase(BaseModel):
     ip_address: str
     port: Optional[int] = DEFAULT_PORT
 
-class NodeRead(NodeBase):
+
+class EarningRead(BaseModel):
+    amount: float
+    status: EarningStatus
+    total_active_time: float
+    avg_memory_bytes: int
+
+class NodeRead(BaseModel):
     node_id: int
     created_at: datetime
     user_id: int
-    model_config = ConfigDict(from_attributes=True)
+    is_alive: bool
+    total_node_earnings: float
+    num_of_completed_tasks: int
+
+class DashboardRead(BaseModel):
+    total_earnings: float
+    paid_earnings: float
+    pending_earnings: float
+    number_of_nodes: int
+    nodes: List[NodeRead]
+
 
 class NodeCreate(NodeBase):
     machine_fingerprint: str

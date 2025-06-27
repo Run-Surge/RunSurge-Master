@@ -101,6 +101,12 @@ class TaskRepository(BaseRepository[Task]):
         query = select(Task).where(Task.node_id == node_id, Task.status == TaskStatus.running)
         result = await self.session.execute(query)
         return result.scalars().all()
+    
+    async def get_tasks_with_job_id(self, job_id: int) -> List[Task]:
+        query = select(Task).where(Task.job_id == job_id).options(joinedload(Task.earning))
+        result = await self.session.execute(query)
+        return result.scalars().all()
+    
 
 async def get_task_repository(session: AsyncSession = Depends(get_db)) -> TaskRepository:
     return TaskRepository(session)

@@ -5,7 +5,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.logging import setup_logging
 from sqlalchemy.exc import IntegrityError
 import traceback
-from app.db.models.scheme import Node
+from app.db.models.scheme import Node, TaskStatus
+from typing import List
 
 logger = setup_logging("NodeService")
 
@@ -55,7 +56,11 @@ class NodeService:
             raise HTTPException(status_code=404, detail="Node not found")
         db_node.is_alive = node.is_alive
         return await self.node_repo.update(db_node)
-
+    
+    async def get_total_earnings(self, nodes: List[Node]):
+        return sum(sum(earning.amount for earning in node.earnings) for node in nodes)
+    async def get_num_of_completed_tasks(self, nodes: List[Node]):
+        return sum(sum(1 for task in node.tasks if task.status == TaskStatus.completed) for node in nodes)
 
 
 def get_node_service(session: AsyncSession) -> NodeService:
