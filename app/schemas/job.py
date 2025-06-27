@@ -29,6 +29,7 @@ class JobRead(JobBase):
 
 class JobDetailRead(JobRead):
     input_file_name: str
+    payment_amount: Optional[float] = None
 
 class ComplexJobRead(BaseModel):
     group_id: int
@@ -37,3 +38,4 @@ class ComplexJobRead(BaseModel):
 
 class ComplexJobDetailRead(ComplexJobRead):
     input_file_name: str
+    payment_amount: Optional[float] = None

@@ -147,7 +147,10 @@ class Job(Base):
     output_data_id = Column(Integer, ForeignKey("data.data_id"), nullable=True)
     #### FOR Complex Job ####
     group_id = Column(Integer, ForeignKey("group.group_id"), nullable=True)
+
+    ### for simple & complex jobs ####
     required_ram = Column(BIGINT, nullable=True)
+    num_of_tasks = Column(Integer, nullable=True)
 
     # Relationships
     user = relationship("User", back_populates="jobs")
@@ -195,6 +198,7 @@ class Task(Base):
     node_id = Column(Integer, ForeignKey("node.node_id"))
     status = Column(SQLEnum(TaskStatus), default=TaskStatus.pending)
     required_ram = Column(BIGINT)
+    # This should be the time to be displayed to the user of its earning
     started_at = Column(DateTime, nullable=True)
     completed_at = Column(DateTime, nullable=True)
     retry_count = Column(Integer, default=0)

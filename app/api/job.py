@@ -59,7 +59,8 @@ async def get_job(
         job_name=job.job_name,
         job_type=job.job_type,
         script_name=job.script_name,
-        input_file_name=input_file_name
+        input_file_name=input_file_name,
+        payment_amount=job.payment.amount
     )
 
 # This endpoint is used to upload data- chunks related to a certain job

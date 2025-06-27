@@ -57,7 +57,7 @@ class JobRepository(BaseRepository[Job]):
         return result.scalars().all()
     
     async def get_job(self, job_id: int) -> Optional[Job]:
-        statement = select(Job).where(Job.job_id == job_id).options(joinedload(Job.output_data_file))
+        statement = select(Job).where(Job.job_id == job_id).options(joinedload(Job.output_data_file), joinedload(Job.payment))
         result = await self.session.execute(statement)
         return result.scalar_one_or_none()
     
