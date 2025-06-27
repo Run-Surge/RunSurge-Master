@@ -39,7 +39,7 @@ class LogEventType(str, Enum):
     failed = 'failed'
     ping = 'ping'
 
-class PaymentStatus(str, Enum):
+class TransactionStatus(str, Enum):
     pending = 'pending'
     completed = 'completed'
     failed = 'failed'
@@ -73,6 +73,7 @@ class User(Base):
     jobs = relationship("Job", back_populates="user")
     nodes = relationship("Node", back_populates="user")
     groups = relationship("Group", back_populates="user")
+    payments = relationship("Payment", back_populates="user")
 
 
 # ram is in bytes, cpu_cores is in cores
@@ -88,12 +89,13 @@ class Node(Base):
     created_at = Column(DateTime, default=datetime.now)
     machine_fingerprint = Column(String, nullable=False)
     is_alive = Column(Boolean, default=False)   
+    payment_factor = Column(Float, default=1.0)
 
     # Relationships
     heartbeat = relationship("NodeHeartbeat", back_populates="node", uselist=False)
     tasks = relationship("Task", back_populates="node")
     logs = relationship("NodeLog", back_populates="node")
-    payments = relationship("Payment", back_populates="node")
+    earnings = relationship("Earning", back_populates="node")
     user = relationship("User", back_populates="nodes")
 
     __table_args__ = (
@@ -143,7 +145,6 @@ class Job(Base):
     script_name = Column(String, nullable=True)
     script_path = Column(String, nullable=True)
     output_data_id = Column(Integer, ForeignKey("data.data_id"), nullable=True)
-
     #### FOR Complex Job ####
     group_id = Column(Integer, ForeignKey("group.group_id"), nullable=True)
     required_ram = Column(BIGINT, nullable=True)
@@ -154,6 +155,8 @@ class Job(Base):
     input_data_files = relationship("InputData", back_populates="job") # All input data files related to this job
     output_data_file = relationship("Data", back_populates="parent_job", uselist=False) # The output data file related to this job
     group = relationship("Group", back_populates="jobs")
+    payment = relationship("Payment", back_populates="job",uselist=False)
+
 class InputData(Base):
     __tablename__ = "input_data"
     input_data_id = Column(Integer, primary_key=True, autoincrement=True)
@@ -196,6 +199,11 @@ class Task(Base):
     completed_at = Column(DateTime, nullable=True)
     retry_count = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.now)
+
+
+    ## on task completion, the memory and cpu time are reported by the node
+    memory = Column(BIGINT, nullable=True)
+    cpu_time = Column(Float, nullable=True)
     
 
     # Relationships
@@ -204,7 +212,7 @@ class Task(Base):
     data_files = relationship("Data", back_populates="parent_task")
     data_dependencies = relationship("Data", secondary="task_data_dependency", back_populates="dependent_tasks")
     logs = relationship("NodeLog", back_populates="task")
-    payment = relationship("Payment", back_populates="task", uselist=False)
+    earning = relationship("Earning", back_populates="task", uselist=False)
 
 
 class TaskDataDependency(Base):
@@ -227,14 +235,26 @@ class NodeLog(Base):
 
 class Payment(Base):
     __tablename__ = "payment"
-    
     payment_id = Column(Integer, primary_key=True, autoincrement=True)
-    node_id = Column(Integer, ForeignKey("node.node_id"))
+    user_id = Column(Integer, ForeignKey("user.user_id"))
+    job_id = Column(Integer, ForeignKey("job.job_id"))
     amount = Column(Float)
-    task_id = Column(Integer, ForeignKey("task.task_id"), unique=True)
-    status = Column(SQLEnum(PaymentStatus), default=PaymentStatus.pending)
+    status = Column(SQLEnum(TransactionStatus), default=TransactionStatus.pending)
     created_at = Column(DateTime, default=datetime.now)
 
     # Relationships
-    node = relationship("Node", back_populates="payments")
-    task = relationship("Task", back_populates="payment") 
+    user = relationship("User", back_populates="payments")
+    job = relationship("Job", back_populates="payment")
+
+class Earning(Base):
+    __tablename__ = "earning"
+    earning_id = Column(Integer, primary_key=True, autoincrement=True)    
+    node_id = Column(Integer, ForeignKey("node.node_id"))
+    amount = Column(Float)
+    task_id = Column(Integer, ForeignKey("task.task_id"), unique=True)
+    status = Column(SQLEnum(TransactionStatus), default=TransactionStatus.pending)
+    created_at = Column(DateTime, default=datetime.now)
+
+    # Relationships
+    node = relationship("Node", back_populates="earnings")
+    task = relationship("Task", back_populates="earning")
