@@ -7,3 +7,4 @@ FUNC_FOOTPRINT_FILE = "func_lines_footprint.json"
 MAIN_FOOTPRINT_FILE = "main_lines_footprint.json"
 MAIN_LISTS_FILE = "main_lists.json"
 ZIP_FILE_CHUNK_SIZE_LIMIT = 100 * 1024 * 1024
+PAYMENT_FACTOR = 1 / (100 * 1024 * 1024 * 60)  # 1 dollar per 100MB per second

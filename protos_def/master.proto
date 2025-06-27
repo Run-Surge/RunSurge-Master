@@ -41,8 +41,10 @@ message MasterDataNotification {
 
 message TaskCompleteRequest {
     int64 task_id = 1;
+    int64 average_memory_bytes = 2;
+    float total_time_elapsed = 3; // in seconds
 }
-
+  
 
 
 

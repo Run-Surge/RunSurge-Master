@@ -83,7 +83,7 @@ class JobRepository(BaseRepository[Job]):
         return result.unique().scalar_one_or_none()
 
     async def get_job_with_tasks(self, job_id: int) -> Optional[Job]:
-        statement = select(Job).where(Job.job_id == job_id).options(joinedload(Job.tasks))
+        statement = select(Job).where(Job.job_id == job_id).options(joinedload(Job.tasks).joinedload(Task.earning))
         result = await self.session.execute(statement)
         return result.unique().scalar_one_or_none()
 
