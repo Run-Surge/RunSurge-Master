@@ -19,8 +19,7 @@ from gRPCApp.utils import parse_grpc_peer_address
 from app.services.task import get_task_service
 from app.services.data import get_data_service
 from app.utils.utils import format_bytes
-from app.db.models.scheme import JobStatus
-import logging
+
 
 class MasterServicer(master_pb2_grpc.MasterServiceServicer):
     """gRPC servicer implementation for MasterService."""

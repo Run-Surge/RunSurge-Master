@@ -85,11 +85,12 @@ class TaskRepository(BaseRepository[Task]):
             for row in rows
         ]
 
-    async def get_task_with_data_files(self, task_id: int):
+    async def get_task_with_data_files_with_node_info(self, task_id: int):
         query = (
             select(Task)
             .options(
-                joinedload(Task.data_files)
+                joinedload(Task.data_files),
+                joinedload(Task.node)
             )
             .where(Task.task_id == task_id)
         )
