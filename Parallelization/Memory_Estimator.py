@@ -716,6 +716,11 @@ class Memory_Parser:
         length = 0
         with open(file_path, 'rb') as f:
             length = sum(1 for _ in f)
+        file_size += self.primitives_estimator.estimate_list_size(length)
+        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+            first_line = f.readline()
+            ncols = len(first_line.strip().split()) if first_line else 0
+        file_size += self.primitives_estimator.estimate_list_size(ncols) * length  #! add the size of the list pointer
         self.vars[var] = (length, file_size, 'list')
     def _get_return_size_length(self,node):
         var_name = None
@@ -1081,6 +1086,9 @@ class Memory_Parser:
         blocks = extract_all_if_blocks(node)
         # for block in blocks:
         #     print(ast.dump(block, indent=4))
-        handle_if_blocks(blocks, n_iterations)       
+        handle_if_blocks(blocks, n_iterations)
+       
             
        
+        
+        
