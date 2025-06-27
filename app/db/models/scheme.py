@@ -39,10 +39,13 @@ class LogEventType(str, Enum):
     failed = 'failed'
     ping = 'ping'
 
-class TransactionStatus(str, Enum):
+class EarningStatus(str, Enum):
+    pending = 'pending'
+    paid = 'paid'
+
+class PaymentStatus(str, Enum):
     pending = 'pending'
     completed = 'completed'
-    failed = 'failed'
 
 class JobType(str, Enum):
     simple = 'simple'
@@ -90,9 +93,9 @@ class Node(Base):
     machine_fingerprint = Column(String, nullable=False)
     is_alive = Column(Boolean, default=False)   
     payment_factor = Column(Float, default=1.0)
+    last_heartbeat = Column(DateTime, default=datetime.now)
 
     # Relationships
-    heartbeat = relationship("NodeHeartbeat", back_populates="node", uselist=False)
     tasks = relationship("Task", back_populates="node")
     logs = relationship("NodeLog", back_populates="node")
     earnings = relationship("Earning", back_populates="node")
@@ -101,15 +104,6 @@ class Node(Base):
     __table_args__ = (
         UniqueConstraint("machine_fingerprint", "user_id", name="uq_machine_fingerprint_user_id"), # Ensure user doesn't have duplicate node names
     )
-
-class NodeHeartbeat(Base):
-    __tablename__ = "node_heartbeat"
-    
-    node_id = Column(Integer, ForeignKey("node.node_id"), primary_key=True)
-    last_ping = Column(DateTime, default=datetime.now)
-
-    # Relationships
-    node = relationship("Node", back_populates="heartbeat")
 
 # This class for the Jobs of the type complex, 1 group can have multiple jobs
 class Group(Base):
@@ -201,6 +195,8 @@ class Task(Base):
     # This should be the time to be displayed to the user of its earning
     started_at = Column(DateTime, nullable=True)
     completed_at = Column(DateTime, nullable=True)
+    total_active_time = Column(Float, nullable=True)
+    avg_memory_bytes = Column(BIGINT, nullable=True)
     retry_count = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.now)
 
@@ -243,7 +239,7 @@ class Payment(Base):
     user_id = Column(Integer, ForeignKey("user.user_id"))
     job_id = Column(Integer, ForeignKey("job.job_id"))
     amount = Column(Float)
-    status = Column(SQLEnum(TransactionStatus), default=TransactionStatus.pending)
+    status = Column(SQLEnum(PaymentStatus), default=PaymentStatus.pending)
     created_at = Column(DateTime, default=datetime.now)
 
     # Relationships
@@ -256,7 +252,7 @@ class Earning(Base):
     node_id = Column(Integer, ForeignKey("node.node_id"))
     amount = Column(Float)
     task_id = Column(Integer, ForeignKey("task.task_id"), unique=True)
-    status = Column(SQLEnum(TransactionStatus), default=TransactionStatus.pending)
+    status = Column(SQLEnum(EarningStatus), default=EarningStatus.pending)
     created_at = Column(DateTime, default=datetime.now)
 
     # Relationships
