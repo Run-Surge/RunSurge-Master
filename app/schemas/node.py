@@ -51,7 +51,7 @@ class NodeUpdateGRPC(BaseModel):
 
 class TaskNodeDetailRead(BaseModel):
     task_id: int
-    started_at: datetime
+    started_at: Optional[datetime] = None
     completed_at: datetime
     total_active_time: float
     avg_memory_bytes: int
