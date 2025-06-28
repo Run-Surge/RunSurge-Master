@@ -5,10 +5,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.logging import setup_logging
 from sqlalchemy.exc import IntegrityError
 import traceback
-from app.db.models.scheme import Node, NodeLog
+from app.db.models.scheme import Node, NodeLog, TaskStatus
 from app.db.repositories.node_log import NodeLogRepository
 from protos import master_pb2
 from datetime import datetime
+from typing import List
 
 logger = setup_logging("NodeService")
 
@@ -68,6 +69,11 @@ class NodeService:
             raise HTTPException(status_code=404, detail="Node not found")
         db_node.is_alive = node.is_alive
         return await self.node_repo.update(db_node)
+    
+    async def get_total_earnings(self, nodes: List[Node]):
+        return sum(sum(earning.amount for earning in node.earnings) for node in nodes)
+    async def get_num_of_completed_tasks(self, nodes: List[Node]):
+        return sum(sum(1 for task in node.tasks if task.status == TaskStatus.completed) for node in nodes)
 
     async def update_node_heartbeat(self, node: master_pb2.NodeHeartbeatRequest):
         db_node = await self.node_repo.get_by_id(node.node_id)
@@ -99,6 +105,15 @@ class NodeService:
                 number_of_tasks=0,
                 memory_usage_bytes=0
             ))
+            
+    async def get_node(self, node_id: int):
+        return await self.node_repo.get_by_id(node_id)
+      
+    async def 
+    
+    _joined_tasks_earnings(self, node_id: int):
+        return await self.node_repo.get_node_joined_tasks_earnings(node_id)
+
 
         await session.commit()
 

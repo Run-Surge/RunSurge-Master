@@ -1,18 +1,22 @@
 from app.db.repositories.task import TaskRepository
 from app.schemas.task import TaskCreate, TaskUpdate, TaskStatus, TaskDataWithNodeInfo, TaskOutputDependentInfo
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.db.models.scheme import Task, Data, DataStatus, Node, JobStatus
+from app.db.models.scheme import Task, Data, DataStatus, Node, JobStatus, Earning, EarningStatus
 from typing import List
-import logging
 from protos import master_pb2, worker_pb2
 from app.services.worker_client import WorkerClient
 import traceback
-
+from app.db.repositories.earnings import EarningsRepository
+from app.utils.constants import PAYMENT_FACTOR
+from app.core.logging import setup_logging
+from datetime import datetime
 ### Tasks are created internally, not using endpoints
 
 class TaskService:
-    def __init__(self, task_repo: TaskRepository):
+    def __init__(self, task_repo: TaskRepository, earnings_repo: EarningsRepository):
         self.task_repo = task_repo
+        self.earnings_repo = earnings_repo
+        self.logger = setup_logging(__name__)    
 
     async def create_task(self, job_id: int, data_ids: list[int], required_ram: int, node_id: int) -> Task:
         ## we may add validation here, or return true/false
@@ -24,10 +28,10 @@ class TaskService:
     async def assign_task_to_node(self, task_id: int, node_id: int) -> Task:
         task = await self.task_repo.get_by_id(task_id)
         if not task:
-            logging.error(f"Task not found: {task_id}")
+            self.logger.error(f"Task not found: {task_id}")
             return False
         if task.node_id is not None:
-            logging.error(f"Task already assigned to node: {task.node_id}")
+            self.logger.error(f"Task already assigned to node: {task.node_id}")
             return False
         task.node_id = node_id
         await self.task_repo.update(task)
@@ -46,17 +50,29 @@ class TaskService:
         """
         return await self.task_repo.get_task_dependents_info(task_id)
     
-    async def _update_status(self, task: Task):
+    async def _calculate_earning(self, completion_info: master_pb2.TaskCompleteRequest, task: Task):
+        print(f"Memory usage total: {completion_info.average_memory_bytes}, Total time elapsed: {completion_info.total_time_elapsed}, Payment factor: {task.node.payment_factor}, Payment factor: {PAYMENT_FACTOR}")
+        earnings = completion_info.average_memory_bytes * \
+             completion_info.total_time_elapsed * \
+             task.node.payment_factor * \
+             PAYMENT_FACTOR
+        print(f"Earning calculated: {earnings}")
+        return earnings
+    
+    async def _update_status(self, task: Task, completion_info: master_pb2.TaskCompleteRequest):
         # Update status of all output files to completed
-        logging.info(f"Updating status of task {task.task_id} to completed")
+        self.logger.info(f"Updating status of task {task.task_id} to completed")
         for data in task.data_files:
             data.status = DataStatus.completed
 
+        task.avg_memory_bytes = completion_info.average_memory_bytes
+        task.total_active_time = completion_info.total_time_elapsed
+        task.completed_at = datetime.now()
         task.status = TaskStatus.completed 
         await self.task_repo.update(task)
     
     async def _notify_dependents(self, task: Task):
-        logging.info(f"Notifying dependents of task {task.task_id}")
+        self.logger.info(f"Notifying dependents of task {task.task_id}")
         worker_client = WorkerClient()
         dependents_info = await self.get_task_output_dependencies_with_node_info(task.task_id)
         await self.task_repo.session.refresh(task, ['node'])
@@ -64,7 +80,7 @@ class TaskService:
         for dependent in dependents_info:
             if dependent.node_id is None:
                 #TODO: what to do if the dependent task is not assigned to a node?
-                logging.error(f"Dependent task not assigned to a node: {dependent.dependent_task_id}")
+                self.logger.error(f"Dependent task not assigned to a node: {dependent.dependent_task_id}")
                 continue
 
             response = await worker_client.notify_data(worker_pb2.DataNotification(
@@ -76,26 +92,36 @@ class TaskService:
             ), dependent.node_ip_address, dependent.node_port)
 
             if not response:
-                logging.error(f"Failed to notify dependent task: {dependent.dependent_task_id}")
+                self.logger.error(f"Failed to notify dependent task: {dependent.dependent_task_id}")
                 continue
 
     
     async def complete_task(self, completion_info: master_pb2.TaskCompleteRequest) -> bool:
         try:
-            task = await self.task_repo.get_task_with_data_files(completion_info.task_id)
+            task = await self.task_repo.get_task_with_data_files_with_node_info(completion_info.task_id)
             if not task:
-                logging.error(f"Task not found: {completion_info.task_id}")
-                return None, None
-            
-            await self._update_status(task)
-            await self._notify_dependents(task)
+                self.logger.error(f"Task not found: {completion_info.task_id}")
+                return None
+            job_id = task.job_id
+            earnings = Earning(
+                task_id=task.task_id,
+                amount=await self._calculate_earning(completion_info, task),
+                status=EarningStatus.pending,
+                node_id=task.node_id,
+                user_id=task.node.user_id
+            )
 
-            return task.job_id
+            await self._update_status(task, completion_info)
+            await self._notify_dependents(task)
+            await self.earnings_repo.create(earnings)
+            self.logger.info(f"Earning created: {earnings}")
+
+            return job_id
 
         except Exception as e:
             print(traceback.format_exc())
-            logging.error(f"Error completing task: {e}")
-            return None, None
+            self.logger.error(f"Error completing task: {e}")
+            return None
         
     async def get_total_node_ram(self, node_id: int) -> int:
         tasks = await self.task_repo.get_running_tasks_by_node_id(node_id)
@@ -104,6 +130,8 @@ class TaskService:
             total_ram += task.required_ram
         return total_ram
         
-
+    async def get_tasks_with_job_id(self, job_id: int) -> List[Task]:
+        return await self.task_repo.get_tasks_with_job_id(job_id)
+    
 def get_task_service(session: AsyncSession) -> TaskService:
-    return TaskService(TaskRepository(session))
+    return TaskService(TaskRepository(session), EarningsRepository(session))

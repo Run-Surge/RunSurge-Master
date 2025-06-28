@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import select, update
-from app.db.models.scheme import Job, JobStatus, JobType, Data, Task
+from app.db.models.scheme import Job, JobStatus, JobType, Data, Task, Payment
 from app.db.repositories.base import BaseRepository
 from app.schemas.job import JobCreate, ComplexJobCreate
 from typing import List, Optional
@@ -83,7 +83,7 @@ class JobRepository(BaseRepository[Job]):
         return result.unique().scalar_one_or_none()
 
     async def get_job_with_tasks(self, job_id: int) -> Optional[Job]:
-        statement = select(Job).where(Job.job_id == job_id).options(joinedload(Job.tasks))
+        statement = select(Job).where(Job.job_id == job_id).options(joinedload(Job.tasks).joinedload(Task.earning))
         result = await self.session.execute(statement)
         return result.unique().scalar_one_or_none()
 
@@ -91,6 +91,16 @@ class JobRepository(BaseRepository[Job]):
         update_statement = update(Job).where(Job.job_id == job_id).values(output_data_id=data_id)
         await self.session.execute(update_statement)
         await self.session.commit()
+    
+    async def get_payment(self, job_id: int) -> Optional[Payment]:
+        statement = select(Payment).where(Payment.job_id == job_id)
+        result = await self.session.execute(statement)
+        return result.scalar_one_or_none()
+    
+    async def update_payment(self, payment: Payment):
+        await self.session.commit()
+        await self.session.refresh(payment)
+        return payment
 
 async def get_job_repository(session: AsyncSession = Depends(get_db)) -> JobRepository:
     return JobRepository(session)

@@ -9,7 +9,7 @@ from app.utils.constants import DEFAULT_PORT
 from sqlalchemy.dialects.postgresql import BIGINT
 # everything concerned with data is in bytes
 
-Base = declarative_base()
+Base = declarative_base()   
 
 class JobStatus(str, Enum):
     submitted = 'submitted'
@@ -77,7 +77,7 @@ class User(Base):
     nodes = relationship("Node", back_populates="user")
     groups = relationship("Group", back_populates="user")
     payments = relationship("Payment", back_populates="user")
-    earnings = relationship("Earning", back_populates="user")
+    # earnings = relationship("Earning", back_populates="user")
 
 # ram is in bytes, cpu_cores is in cores
 class Node(Base):
@@ -190,20 +190,15 @@ class Task(Base):
     task_id = Column(Integer, primary_key=True, autoincrement=True)
     job_id = Column(Integer, ForeignKey("job.job_id"))
     node_id = Column(Integer, ForeignKey("node.node_id"))
-    status = Column(SQLEnum(TaskStatus), default=TaskStatus.pending)
     required_ram = Column(BIGINT)
     # This should be the time to be displayed to the user of its earning
+    status = Column(SQLEnum(TaskStatus), default=TaskStatus.pending)
     started_at = Column(DateTime, nullable=True)
     completed_at = Column(DateTime, nullable=True)
     total_active_time = Column(Float, nullable=True)
     avg_memory_bytes = Column(BIGINT, nullable=True)
     retry_count = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.now)
-
-
-    ## on task completion, the memory and cpu time are reported by the node
-    memory = Column(BIGINT, nullable=True)
-    cpu_time = Column(Float, nullable=True)
     
 
     # Relationships
@@ -239,6 +234,7 @@ class Payment(Base):
     amount = Column(Float)
     status = Column(SQLEnum(PaymentStatus), default=PaymentStatus.pending)
     created_at = Column(DateTime, default=datetime.now)
+    payment_date = Column(DateTime, nullable=True)
 
     # Relationships
     user = relationship("User", back_populates="payments")
@@ -248,13 +244,13 @@ class Earning(Base):
     __tablename__ = "earning"
     earning_id = Column(Integer, primary_key=True, autoincrement=True)    
     node_id = Column(Integer, ForeignKey("node.node_id"))
-    user_id = Column(Integer, ForeignKey("user.user_id"))
+    # user_id = Column(Integer, ForeignKey("user.user_id"))
     amount = Column(Float)
     task_id = Column(Integer, ForeignKey("task.task_id"), unique=True)
     status = Column(SQLEnum(EarningStatus), default=EarningStatus.pending)
     created_at = Column(DateTime, default=datetime.now)
-
+    earning_date = Column(DateTime, nullable=True)
     # Relationships
     node = relationship("Node", back_populates="earnings")
     task = relationship("Task", back_populates="earning")
-    user = relationship("User", back_populates="earnings")
+    # user = relationship("User", back_populates="earnings")
