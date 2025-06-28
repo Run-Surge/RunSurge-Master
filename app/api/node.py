@@ -6,6 +6,7 @@ from app.core.security import  get_current_user_from_cookie
 from app.db.models.scheme import User, TaskStatus   
 from app.db.session import get_db
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.schemas.node import NodeRead
 from typing import List
 import traceback
 router = APIRouter()
@@ -19,6 +20,21 @@ async def register_node(
     node_service = get_node_service(session)
     created_node = await node_service.create_node(node, current_user["user_id"])
     return created_node
+
+
+## function to get all nodes
+@router.get("/", response_model=List[NodeRead])
+async def get_nodes(
+    session: AsyncSession = Depends(get_db),
+):
+    try:
+        node_service = get_node_service(session)
+        nodes= await node_service.get_all_nodes()
+        return nodes
+    except Exception as e:
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail="Failed to fetch nodes")
+
 
 @router.get("/{node_id}", response_model=NodeDetailRead)
 async def get_node(

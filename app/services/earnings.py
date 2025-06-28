@@ -26,6 +26,10 @@ class EarningsService:
     async def get_earning_amount_by_task_id(self, task_id: int):
         earning = await self.earnings_repo.get_by_task_id(task_id)
         return earning.amount if earning else None
+    
+    async def get_all_earnings_amount(self):
+        earnings = await self.earnings_repo.get_all()
+        return sum(earning.amount for earning in earnings)
 
 def get_earnings_service(session: AsyncSession) -> EarningsService:
     return EarningsService(get_earnings_repository(session))
