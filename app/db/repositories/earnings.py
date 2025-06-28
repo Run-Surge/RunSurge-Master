@@ -7,6 +7,7 @@ class EarningsRepository(BaseRepository[Earning]):
     def __init__(self, session: AsyncSession):
         super().__init__(session, Earning)
 
+
     async def get_by_task_id(self, task_id: int) -> Earning:
         statement = select(Earning).where(Earning.task_id == task_id)
         result = await self.session.execute(statement)
