@@ -7,6 +7,7 @@ from app.db.session import get_db
 from app.schemas.node import NodeRegisterGRPC
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models.scheme import Node
+from datetime import datetime, timedelta
 
 class NodeRepository(BaseRepository[Node]):
     def __init__(self, session: AsyncSession):
@@ -52,6 +53,11 @@ class NodeRepository(BaseRepository[Node]):
 
     async def get_all_nodes(self) -> List[Node]:
         statement = select(Node).where(Node.is_alive == True)
+        result = await self.session.execute(statement)
+        return result.scalars().all()
+    
+    async def get_defered_nodes(self) -> List[Node]:
+        statement = select(Node).where(Node.is_alive == True, Node.last_heartbeat < datetime.now() - timedelta(seconds=30))
         result = await self.session.execute(statement)
         return result.scalars().all()
 

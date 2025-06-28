@@ -5,13 +5,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.logging import setup_logging
 from sqlalchemy.exc import IntegrityError
 import traceback
-from app.db.models.scheme import Node
+from app.db.models.scheme import Node, NodeLog
+from app.db.repositories.node_log import NodeLogRepository
+from protos import master_pb2
+from datetime import datetime
 
 logger = setup_logging("NodeService")
 
 class NodeService:
-    def __init__(self, node_repo: NodeRepository):
+    def __init__(self, node_repo: NodeRepository, node_log_repo: NodeLogRepository):
         self.node_repo = node_repo
+        self.node_log_repo = node_log_repo
         self.logger = setup_logging("NodeService")
 
     async def create_node(self, node: NodeRegisterGRPC) -> Node:        
@@ -31,11 +35,20 @@ class NodeService:
     async def register_node(self, node: NodeRegisterGRPC) -> Node:
         try:
             db_node = await self.create_node(node)
+            session = self.node_log_repo.session
             #TODO: check if node is alive
             db_node.ram = node.memory_bytes
             db_node.ip_address = node.ip_address
             db_node.port = node.port
             db_node.is_alive = True
+            db_node.last_heartbeat = datetime.now()
+            
+            session.add(NodeLog(
+                node_id=db_node.node_id,
+                number_of_tasks=0,
+                memory_usage_bytes=0
+            ))
+
             await self.node_repo.update(db_node)
             return db_node
         except Exception as e:
@@ -56,7 +69,38 @@ class NodeService:
         db_node.is_alive = node.is_alive
         return await self.node_repo.update(db_node)
 
+    async def update_node_heartbeat(self, node: master_pb2.NodeHeartbeatRequest):
+        db_node = await self.node_repo.get_by_id(node.node_id)
+        
+        if not db_node:
+            raise HTTPException(status_code=404, detail="Node not found")
+        
+        db_node.is_alive = True
+        db_node.last_heartbeat = datetime.now()
 
+        await self.node_repo.update(db_node)
+        await self.node_log_repo.create(NodeLog(
+            node_id=node.node_id,
+            number_of_tasks=node.number_of_tasks,
+            memory_usage_bytes=node.memory_usage_bytes
+        ))
+
+    async def update_dead_nodes(self):
+        current_time = datetime.now()
+        nodes = await self.node_repo.get_defered_nodes()
+        session = self.node_repo.session
+        self.logger.debug(f"Found {len(nodes)} dead nodes")
+        for node in nodes:
+            print(f"Updating node {node.node_id} to dead, last heartbeat: {node.last_heartbeat}, current time: {current_time}")
+            node.is_alive = False
+            await self.node_repo.update(node)
+            session.add(NodeLog(
+                node_id=node.node_id,
+                number_of_tasks=0,
+                memory_usage_bytes=0
+            ))
+
+        await session.commit()
 
 def get_node_service(session: AsyncSession) -> NodeService:
-    return NodeService(NodeRepository(session))
+    return NodeService(NodeRepository(session), NodeLogRepository(session)  )

@@ -211,7 +211,6 @@ class Task(Base):
     node = relationship("Node", back_populates="tasks")
     data_files = relationship("Data", back_populates="parent_task")
     data_dependencies = relationship("Data", secondary="task_data_dependency", back_populates="dependent_tasks")
-    logs = relationship("NodeLog", back_populates="task")
     earning = relationship("Earning", back_populates="task", uselist=False)
 
 
@@ -225,13 +224,12 @@ class NodeLog(Base):
     
     log_id = Column(Integer, primary_key=True, autoincrement=True)
     node_id = Column(Integer, ForeignKey("node.node_id"))
-    task_id = Column(Integer, ForeignKey("task.task_id"), nullable=True)
-    event_type = Column(SQLEnum(LogEventType))
     timestamp = Column(DateTime, default=datetime.now)
+    number_of_tasks = Column(Integer)
+    memory_usage_bytes = Column(BIGINT)
 
     # Relationships
     node = relationship("Node", back_populates="logs")
-    task = relationship("Task", back_populates="logs")
 
 class Payment(Base):
     __tablename__ = "payment"
