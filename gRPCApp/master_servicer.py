@@ -19,8 +19,7 @@ from gRPCApp.utils import parse_grpc_peer_address
 from app.services.task import get_task_service
 from app.services.data import get_data_service
 from app.utils.utils import format_bytes
-from app.db.models.scheme import JobStatus
-import logging
+
 
 class MasterServicer(master_pb2_grpc.MasterServiceServicer):
     """gRPC servicer implementation for MasterService."""
@@ -138,3 +137,15 @@ class MasterServicer(master_pb2_grpc.MasterServiceServicer):
             self.logger.error(f"Error in StreamData: {e}")
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(f"Internal error: {str(e)}")
+
+
+    async def NodeHeartbeat(self, request: master_pb2.NodeHeartbeatRequest, context: grpc.ServicerContext):
+        self.logger.info(f"NodeHeartbeat request: {request}")
+        try:
+            async with get_db_context() as session:
+                node_service = get_node_service(session)
+                await node_service.update_node_heartbeat(request)
+                return common_pb2.StatusResponse(success=True, message="Node heartbeat updated successfully")
+        except Exception as e:
+            self.logger.error(f"Error in NodeHeartbeat: {e}")
+            return common_pb2.StatusResponse(success=False, message=str(e))

@@ -5,8 +5,10 @@ from typing import Optional, List
 from fastapi import Depends
 from app.db.session import get_db
 from app.schemas.node import NodeRegisterGRPC
+from sqlalchemy.orm import joinedload
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.db.models.scheme import Node
+from app.db.models.scheme import Node, TaskStatus, Task
+from datetime import datetime, timedelta
 
 class NodeRepository(BaseRepository[Node]):
     def __init__(self, session: AsyncSession):
@@ -45,15 +47,32 @@ class NodeRepository(BaseRepository[Node]):
         return result.scalars().first()
 
     async def get_user_nodes(self, user_id: int) -> List[Node]:
-        statement = select(Node).where(Node.user_id == user_id)
+        statement = select(Node).where(Node.user_id == user_id).options(joinedload(Node.earnings),joinedload(Node.tasks))
         result = await self.session.execute(statement)
-        return result.scalars().all()
+        return result.scalars().unique().all()
 
 
     async def get_all_nodes(self) -> List[Node]:
         statement = select(Node).where(Node.is_alive == True)
         result = await self.session.execute(statement)
         return result.scalars().all()
+    
+    async def get_defered_nodes(self) -> List[Node]:
+        statement = select(Node).where(Node.is_alive == True, Node.last_heartbeat < datetime.now() - timedelta(seconds=30))
+        result = await self.session.execute(statement)
+        return result.scalars().all()
+
+    async def get_node_joined_tasks_earnings(self, node_id: int) -> Node:
+        statement = (
+            select(Node)
+            .where(Node.node_id == node_id)
+            .options(
+                joinedload(Node.earnings),
+                joinedload(Node.tasks)
+            )
+        )
+        result = await self.session.execute(statement)
+        return result.scalars().first()
 
 async def get_node_repository(session: AsyncSession = Depends(get_db)) -> NodeRepository:
     return NodeRepository(session)

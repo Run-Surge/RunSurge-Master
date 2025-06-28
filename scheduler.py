@@ -1393,7 +1393,7 @@ async def main():
                             #     job_service = get_job_service(session)
                             #     job_service.update_job_status(job.job_id, JobStatus.running)
                         else:
-                            await scheduler(job.job_id, session, input_file)
+                            await scheduler(job.job_id, session, input_file + '.csv')
                             # result = await scheduler(job.job_id, session, input_file)
                             # if result:
                             #     job_service = get_job_service(session)

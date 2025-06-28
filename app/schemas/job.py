@@ -1,7 +1,7 @@
 from pydantic import BaseModel
 from datetime import datetime
-from typing import Optional             
-from app.db.models.scheme import JobType, JobStatus
+from typing import Optional, List             
+from app.db.models.scheme import JobType, JobStatus, PaymentStatus
 class JobBase(BaseModel):
     pass
 
@@ -29,6 +29,7 @@ class JobRead(JobBase):
 
 class JobDetailRead(JobRead):
     input_file_name: str
+    payment_amount: Optional[float] = None
 
 class ComplexJobRead(BaseModel):
     group_id: int
@@ -37,3 +38,20 @@ class ComplexJobRead(BaseModel):
 
 class ComplexJobDetailRead(ComplexJobRead):
     input_file_name: str
+    payment_amount: Optional[float] = None
+
+
+class TaskPaymentRead(BaseModel):
+    task_id: int
+    total_active_time: float
+    avg_memory_bytes: int
+    task_payment_amount: Optional[float] = None
+
+class PaymentRead(BaseModel):
+    job_id: int
+    amount: float
+    status: PaymentStatus
+    num_of_tasks: int
+    payment_date: Optional[datetime] = None
+    tasks: List[TaskPaymentRead]
+    

@@ -9,18 +9,21 @@ from app.utils.utils import Create_directory, save_file
 import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.utils.constants import JOBS_DIRECTORY_PATH
-from app.db.models.scheme import JobStatus, JobType, TaskStatus 
+from app.db.models.scheme import JobStatus, JobType, TaskStatus, Payment, PaymentStatus
 from app.utils.utils import validate_file, get_data_path
 from app.services.worker_client import WorkerClient
 import traceback
 from protos import common_pb2
-import logging
 import os
+from app.db.repositories.payment import PaymentRepository
+from app.core.logging import setup_logging
+from datetime import datetime
 
 class JobService:
-    def __init__(self, job_repo: JobRepository):
+    def __init__(self, job_repo: JobRepository, payment_repo: PaymentRepository):
         self.job_repo = job_repo
-        self.logger = logging.getLogger(__name__)
+        self.payment_repo = payment_repo
+        self.logger = setup_logging(__name__)
     async def create_job_with_script(
         self, 
         user_id: int,
@@ -115,16 +118,30 @@ class JobService:
             self.logger.info(f"Updating job {job_id} after task completion")
             job = await self.job_repo.get_job_with_tasks(job_id)
             all_tasks_completed = True
+            total_active_time = 0
+            total_cost = 0
+
             for task in job.tasks:
+                total_active_time += task.total_active_time
+                total_cost += task.earning.amount
                 if task.status != TaskStatus.completed:
                     all_tasks_completed = False
                     break
 
+            if not all_tasks_completed:
+                return None
+
             self.logger.info(f"Job {job_id} all tasks completed: {all_tasks_completed}")
             group_id = job.group_id
-            if all_tasks_completed:
-                await self.download_output_data(job_id)
-                await self.update_job_status(job_id, JobStatus.completed)
+            payment = Payment(
+            user_id=job.user_id,
+            job_id=job_id,
+            amount=total_cost,
+            status=PaymentStatus.pending
+            )
+            await self.payment_repo.create(payment)
+            await self.download_output_data(job_id)
+            await self.update_job_status(job_id, JobStatus.completed)
 
             return group_id
             
@@ -149,5 +166,24 @@ class JobService:
             print(traceback.format_exc())
             return False
 
+    async def get_payment(self, job_id: int):
+        payment = await self.job_repo.get_payment(job_id)
+        if not payment:
+            return None
+        return payment
+    
+    async def pay_job(self, job_id: int):
+        payment = await self.job_repo.get_payment(job_id)
+        try:
+            if not payment:
+                raise HTTPException(status_code=404, detail="Payment not found")
+            payment.status = PaymentStatus.completed
+            payment.payment_date = datetime.now()
+            await self.job_repo.update_payment(payment)
+            return True
+        except Exception as e:
+            print(traceback.format_exc())
+            raise HTTPException(status_code=500, detail=str(e))
+
 def get_job_service(session: AsyncSession) -> JobService:
-    return JobService(JobRepository(session))
+    return JobService(JobRepository(session), PaymentRepository(session))

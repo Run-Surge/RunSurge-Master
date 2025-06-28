@@ -1,15 +1,17 @@
 from fastapi import Depends, APIRouter, HTTPException
 from app.core.security import get_current_user_from_cookie_optional, get_current_user_from_cookie
-from app.db.models.scheme import User
+from app.db.models.scheme import User, TaskStatus
 from app.db.session import get_db
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.services.job import get_job_service
 from app.services.node import get_node_service
 from app.schemas.job import JobRead
 from app.schemas.group import GroupRead
+from app.schemas.node import NodeRead, DashboardRead
 from typing import List
 from app.services.group import get_group_service
-
+from app.services.earnings import get_earnings_service
+import traceback
 router = APIRouter()
 
 
@@ -53,22 +55,41 @@ async def get_user_jobs(
         "success": True
     }
 
-@router.get("/nodes")
+@router.get("/nodes",response_model=DashboardRead)
 async def get_user_nodes(
     current_user = Depends(get_current_user_from_cookie),
     session: AsyncSession = Depends(get_db)
 ):
     """Get all nodes registered by the current user."""
-    if not current_user:
-        raise HTTPException(status_code=401, detail="Authentication required")
-    
-    node_service = get_node_service(session)
-    nodes = await node_service.get_user_nodes(current_user["user_id"])
-    return {
-        "nodes": nodes,
-        "message": "Nodes fetched successfully",
-        "success": True
-    }
+    try:
+        if not current_user:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        node_service = get_node_service(session)
+        earnings_service = get_earnings_service(session)
+        nodes = await node_service.get_user_nodes(current_user["user_id"])
+        total_earnings = await node_service.get_total_earnings(nodes)
+        paid_earnings = await earnings_service.get_paid_earnings(nodes)
+        pending_earnings = await earnings_service.get_pending_earnings(nodes)
+        print("Here")
+        return DashboardRead(
+                total_earnings=total_earnings,
+                paid_earnings=paid_earnings,
+                pending_earnings=pending_earnings,
+                number_of_nodes=len(nodes),
+                nodes=[
+            NodeRead(
+                node_id=node.node_id,
+                created_at=node.created_at,
+                user_id=node.user_id,
+                is_alive=node.is_alive,
+                total_node_earnings=sum(earning.amount for earning in node.earnings),
+                num_of_completed_tasks=sum(1 for task in node.tasks if task.status == TaskStatus.completed),
+            ) for node in nodes
+            ]
+        )
+    except Exception as e:
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail="Failed to fetch nodes")
 
 @router.get("/groups", response_model=List[GroupRead])
 async def get_groups(
