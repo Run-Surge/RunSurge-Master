@@ -20,6 +20,12 @@ class EarningsService:
         return sum(sum(earning.amount for earning in node.earnings if earning.status == EarningStatus.paid) for node in nodes)
     async def get_pending_earnings(self, nodes: List[Node]):
         return sum(sum(earning.amount for earning in node.earnings if earning.status == EarningStatus.pending) for node in nodes)
+    async def get_earning_status_by_task_id(self, task_id: int):
+        earning = await self.earnings_repo.get_by_task_id(task_id)
+        return earning.status if earning else None
+    async def get_earning_amount_by_task_id(self, task_id: int):
+        earning = await self.earnings_repo.get_by_task_id(task_id)
+        return earning.amount if earning else None
 
 def get_earnings_service(session: AsyncSession) -> EarningsService:
     return EarningsService(get_earnings_repository(session))

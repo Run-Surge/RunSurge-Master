@@ -62,6 +62,11 @@ class NodeService:
     async def get_num_of_completed_tasks(self, nodes: List[Node]):
         return sum(sum(1 for task in node.tasks if task.status == TaskStatus.completed) for node in nodes)
 
+    async def get_node(self, node_id: int):
+        return await self.node_repo.get_by_id(node_id)
+    async def get_node_joined_tasks_earnings(self, node_id: int):
+        return await self.node_repo.get_node_joined_tasks_earnings(node_id)
+
 
 def get_node_service(session: AsyncSession) -> NodeService:
     return NodeService(NodeRepository(session))

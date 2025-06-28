@@ -55,6 +55,11 @@ class NodeRepository(BaseRepository[Node]):
         statement = select(Node).where(Node.is_alive == True)
         result = await self.session.execute(statement)
         return result.scalars().all()
+    
+    async def get_node_joined_tasks_earnings(self, node_id: int) -> Node:
+        statement = select(Node).where(Node.node_id == node_id).options(joinedload(Node.earnings),joinedload(Node.tasks))
+        result = await self.session.execute(statement)
+        return result.scalars().first()
 
 async def get_node_repository(session: AsyncSession = Depends(get_db)) -> NodeRepository:
     return NodeRepository(session)
