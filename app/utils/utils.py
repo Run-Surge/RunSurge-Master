@@ -3,9 +3,10 @@ import os
 from fastapi import UploadFile
 from app.db.models.scheme import Node, Job, JobType
 from fastapi import HTTPException
-from app.utils.constants import FILE_SIZE_LIMIT, DATA_CHUNK_SIZE_LIMIT, ZIP_FILE_CHUNK_SIZE_LIMIT,GROUPS_DIRECTORY_PATH,JOBS_DIRECTORY_PATH
-from app.utils.constants import GROUPS_DIRECTORY_PATH, JOBS_DIRECTORY_PATH
+from app.utils.constants import FILE_SIZE_LIMIT, DATA_CHUNK_SIZE_LIMIT, ZIP_FILE_CHUNK_SIZE_LIMIT,GROUPS_DIRECTORY_PATH,JOBS_DIRECTORY_PATH,TEMP_DIRECTORY_PATH
 import shutil
+import uuid
+from app.utils.vulnerability_scanner import run_semgrep
 
 def Create_directory(path: str):
     if not os.path.exists(path):
@@ -23,13 +24,20 @@ def append_chunk_to_zip_file(input_file: UploadFile, file_path: str, file_name: 
         f.write(input_file.file.read())
 
 
-def validate_file(file: UploadFile):
+def  validate_file(file: UploadFile):
     if not file.filename.endswith('.py'):
         raise HTTPException(status_code=400, detail="Only Python files (.py) are allowed")
     if file.size == 0:
         raise HTTPException(status_code=400, detail="File is empty")
     if file.size > FILE_SIZE_LIMIT:
         raise HTTPException(status_code=400, detail="File size exceeds 10MB limit") 
+    random_name = str(uuid.uuid4())
+    os.makedirs(TEMP_DIRECTORY_PATH, exist_ok=True)
+    save_file(file, f"{TEMP_DIRECTORY_PATH}/{random_name}.py")
+    if(run_semgrep(f"{TEMP_DIRECTORY_PATH}/{random_name}.py", "app/utils/dangerous.yaml")):
+        os.remove(f"{TEMP_DIRECTORY_PATH}/{random_name}.py")
+        raise HTTPException(status_code=400, detail="Vulnerable script detected")
+    os.remove(f"{TEMP_DIRECTORY_PATH}/{random_name}.py")
     
 def validate_data_chunk(file: UploadFile):
     if not file.filename.endswith('.csv'):
