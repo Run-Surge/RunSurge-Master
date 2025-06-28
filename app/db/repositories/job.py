@@ -23,7 +23,7 @@ class JobRepository(BaseRepository[Job]):
         return await self.create(job)
 
     async def get_simple_user_jobs(self, user_id: int) -> List[Job]:
-        statement = select(Job).where(Job.user_id == user_id, Job.job_type == JobType.simple)
+        statement = select(Job).where(Job.user_id == user_id, Job.job_type == JobType.simple).order_by(Job.created_at.desc())
         result = await self.session.execute(statement)
         return result.scalars().all()
 

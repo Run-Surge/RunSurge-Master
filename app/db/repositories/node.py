@@ -7,7 +7,7 @@ from app.db.session import get_db
 from app.schemas.node import NodeRegisterGRPC
 from sqlalchemy.orm import joinedload
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.db.models.scheme import Node
+from app.db.models.scheme import Node, TaskStatus, Task
 from datetime import datetime, timedelta
 
 class NodeRepository(BaseRepository[Node]):
@@ -63,7 +63,14 @@ class NodeRepository(BaseRepository[Node]):
         return result.scalars().all()
 
     async def get_node_joined_tasks_earnings(self, node_id: int) -> Node:
-        statement = select(Node).where(Node.node_id == node_id).options(joinedload(Node.earnings),joinedload(Node.tasks))
+        statement = (
+            select(Node)
+            .where(Node.node_id == node_id)
+            .options(
+                joinedload(Node.earnings),
+                joinedload(Node.tasks)
+            )
+        )
         result = await self.session.execute(statement)
         return result.scalars().first()
 

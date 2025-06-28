@@ -3,7 +3,7 @@ from app.schemas.node import NodeCreate, NodeRead, NodeDetailRead, TaskNodeDetai
 from app.services.node import get_node_service
 from app.services.earnings import get_earnings_service
 from app.core.security import  get_current_user_from_cookie
-from app.db.models.scheme import User
+from app.db.models.scheme import User, TaskStatus   
 from app.db.session import get_db
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
@@ -52,7 +52,9 @@ async def get_node(
                         status=task.status,
                         earning_amount=await earnings_service.get_earning_amount_by_task_id(task.task_id),
                         earning_status=await earnings_service.get_earning_status_by_task_id(task.task_id)
-                    ) for task in node.tasks
+                    ) 
+                    for task in node.tasks
+                    if task.status == TaskStatus.completed
                 ]
             )
     except Exception as e:

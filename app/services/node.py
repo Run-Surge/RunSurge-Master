@@ -109,13 +109,9 @@ class NodeService:
     async def get_node(self, node_id: int):
         return await self.node_repo.get_by_id(node_id)
       
-    async def 
-    
-    _joined_tasks_earnings(self, node_id: int):
+    async def get_node_joined_tasks_earnings(self, node_id: int):
         return await self.node_repo.get_node_joined_tasks_earnings(node_id)
 
-
-        await session.commit()
 
 def get_node_service(session: AsyncSession) -> NodeService:
     return NodeService(NodeRepository(session), NodeLogRepository(session)  )

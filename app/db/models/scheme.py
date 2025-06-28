@@ -77,7 +77,7 @@ class User(Base):
     nodes = relationship("Node", back_populates="user")
     groups = relationship("Group", back_populates="user")
     payments = relationship("Payment", back_populates="user")
-    # earnings = relationship("Earning", back_populates="user")
+    earnings = relationship("Earning", back_populates="user")
 
 # ram is in bytes, cpu_cores is in cores
 class Node(Base):
@@ -244,7 +244,7 @@ class Earning(Base):
     __tablename__ = "earning"
     earning_id = Column(Integer, primary_key=True, autoincrement=True)    
     node_id = Column(Integer, ForeignKey("node.node_id"))
-    # user_id = Column(Integer, ForeignKey("user.user_id"))
+    user_id = Column(Integer, ForeignKey("user.user_id"))
     amount = Column(Float)
     task_id = Column(Integer, ForeignKey("task.task_id"), unique=True)
     status = Column(SQLEnum(EarningStatus), default=EarningStatus.pending)
@@ -253,4 +253,4 @@ class Earning(Base):
     # Relationships
     node = relationship("Node", back_populates="earnings")
     task = relationship("Task", back_populates="earning")
-    # user = relationship("User", back_populates="earnings")
+    user = relationship("User", back_populates="earnings")
