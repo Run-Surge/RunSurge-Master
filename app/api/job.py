@@ -18,6 +18,8 @@ from fastapi.responses import FileResponse
 from app.services.task import get_task_service
 from app.services.earnings import get_earnings_service
 import traceback
+from datetime import datetime
+
 router = APIRouter()
 
 @router.post("/", response_model=JobRead)
@@ -107,7 +109,7 @@ async def pay_job(
             raise HTTPException(status_code=401, detail="Unauthorized")
         job_service = get_job_service(session)
         job = await job_service.get_job(job_id)
-        if job.user_id != current_user["user_id"]:
+        if job.user_id != current_user["user_id"]:  
             raise HTTPException(status_code=403, detail="Forbidden")
         payment = await job_service.get_payment(job_id)
         if payment.status == PaymentStatus.completed:
@@ -118,6 +120,7 @@ async def pay_job(
         for task in tasks:
             task_earning = task.earning
             task_earning.status = EarningStatus.paid
+            task_earning.earning_date = datetime.now()  
         await job_service.pay_job(job_id)
         return {
             "message": "Payment completed successfully",

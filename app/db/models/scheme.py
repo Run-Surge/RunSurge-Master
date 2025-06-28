@@ -121,6 +121,10 @@ class Group(Base):
     created_at = Column(DateTime, default=datetime.now)
     status = Column(SQLEnum(GroupStatus), default=GroupStatus.submitted)
     output_data_id = Column(Integer, ForeignKey("data.data_id"), nullable=True)
+    ## 3apqr should update this
+    payment_status = Column(SQLEnum(PaymentStatus), default=PaymentStatus.pending)
+    payment_amount = Column(Float, default=0)
+    payment_date = Column(DateTime, nullable=True)
 
     # Relationships
     jobs = relationship("Job", back_populates="group")

@@ -10,11 +10,14 @@ from typing import List
 import traceback
 from app.utils.utils import append_chunk_to_zip_file, validate_zip_file_chunk
 from app.services.data import get_input_data_service
-from app.db.models.scheme import JobStatus, GroupStatus
+from app.db.models.scheme import JobStatus, GroupStatus, PaymentStatus
 import os
 from app.utils.constants import GROUPS_DIRECTORY_PATH
 from fastapi.responses import FileResponse
-
+from app.services.payment import get_payment_service
+from app.services.task import get_task_service
+from app.db.models.scheme import EarningStatus
+from datetime import datetime
 router = APIRouter()
 
 @router.post("/",response_model=GroupRead)
@@ -67,19 +70,27 @@ async def get_group_by_id(
     try:
         group_service = get_group_service(session)
         group = await group_service.get_group_by_id(group_id=group_id)
+        payment_service = get_payment_service(session)
         if not group:
             raise HTTPException(status_code=404, detail="Group not found")
+        completed=True
+        print("Here")
         for job in group.jobs:
+            completed = completed and job.status == JobStatus.completed
             input_data = await get_input_data_service(session).get_input_data(job.job_id)
             if input_data:
                 job.input_file_name = input_data.file_name
             else:
                 job.input_file_name = "No input file"
-
+        if completed:
+            for job in group.jobs:
+                payment = await payment_service.get_payment_by_job_id(job.job_id)
+                if payment:
+                    job.payment_amount = payment.amount
         return group
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    
+
 
 
 #-------------------------------------------------Upload Complex Job Data-------------------------------------------------
@@ -158,3 +169,30 @@ async def get_group_result(
         filename=f"group_output.zip",
         media_type="application/zip"
     )
+
+
+#-------------------------------------------------Pay Group-------------------------------------------------
+
+@router.post("/{group_id}/payment")
+async def pay_group(
+    group_id: int,
+    session: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user_from_cookie)
+):
+    try:
+        if not current_user:
+            raise HTTPException(status_code=401, detail="Unauthorized")
+        group_service = get_group_service(session)
+        group = await group_service.get_group_by_id(group_id)
+        if group.user_id != current_user["user_id"]:
+            raise HTTPException(status_code=403, detail="Forbidden")
+        if group.payment_status == PaymentStatus.completed:
+            raise HTTPException(status_code=400, detail="Payment already completed")
+        await group_service.pay_group(group_id)
+        return {
+            "message": "Payment completed successfully",
+            "success": True
+        }
+    except Exception as e:
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500,detail="Payment failed")
