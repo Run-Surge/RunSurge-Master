@@ -27,3 +27,7 @@ class BaseRepository(Generic[T]):
     async def get_all(self) -> List[T]:
         result = await self.session.execute(select(self.model))
         return result.scalars().all()
+    
+    async def update(self, obj: T) -> None:
+        await self.session.commit()
+        await self.session.refresh(obj)

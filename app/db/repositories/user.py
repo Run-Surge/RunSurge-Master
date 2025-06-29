@@ -5,7 +5,7 @@ from app.db.repositories.base import BaseRepository
 from typing import Optional
 from fastapi import Depends
 from app.db.session import get_db
-from app.schemas.user import UserCreate
+from app.schemas.user import UserLoginCreate
 from app.core.security import security_manager
 from sqlalchemy.ext.asyncio import AsyncSession
 class UserRepository(BaseRepository[User]):
@@ -25,7 +25,7 @@ class UserRepository(BaseRepository[User]):
         statement = select(User).where(User.email == email)
         return await self.session.execute(statement).scalar_one_or_none()
 
-    async def create_user(self, user: UserCreate) -> User:
+    async def create_user(self, user: UserLoginCreate) -> User:
         hashed_password = security_manager.hash_password(user.password)
         db_user = User(username=user.username, email=user.email, password=hashed_password)
         return await self.create(db_user)

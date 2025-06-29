@@ -7,7 +7,7 @@ class Settings(BaseSettings):
 
     SECRET_KEY: str
     ALGORITHM: Optional[str] = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: Optional[int] = 60
+    ACCESS_TOKEN_EXPIRE_MINUTES: Optional[int] = 3600000
     REFRESH_TOKEN_EXPIRE_DAYS: Optional[int] = 7
 
     DB_USER: str
@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     DB_PORT: int
 
     MASTER_PORT: Optional[int] = 8000
+    GRPC_IP: Optional[str] = "10.10.10.246"
+    GRPC_PORT: Optional[int] = 12345
 
     @property
     def DATABASE_URL(self) -> str:

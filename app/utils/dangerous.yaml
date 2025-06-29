@@ -1,0 +1,237 @@
+# Semgrep rules for flagging dangerous Python patterns:
+# OS/system calls, remote execution, network connections, dynamic code,
+# insecure deserialization, cryptography, hardcoded secrets, file ops, etc.
+
+rules:
+  # --- MODULE IMPORTS (ENTRY POINT) ---
+  - id: import-os
+    pattern: import os
+    message: "'os' module imported — often used for system calls and file operations."
+    severity: WARNING
+    languages: [python]
+
+  - id: import-sys
+    pattern: import sys
+    message: "'sys' module imported — can manipulate interpreter, paths, and execution."
+    severity: WARNING
+    languages: [python]
+
+  - id: import-subprocess
+    pattern: import subprocess
+    message: "'subprocess' module imported — enables spawning external processes."
+    severity: WARNING
+    languages: [python]
+
+  - id: import-pty
+    pattern: import pty
+    message: "'pty' module imported — used in reverse shells and terminal control."
+    severity: WARNING
+    languages: [python]
+
+  - id: import-socket
+    pattern: import socket
+    message: "'socket' module imported — raw network access."
+    severity: WARNING
+    languages: [python]
+
+  - id: import-http-client
+    pattern: import http.client
+    message: "'http.client' imported — low-level HTTP functionality."
+    severity: WARNING
+    languages: [python]
+
+  - id: import-urllib
+    pattern: import urllib
+    message: "'urllib' imported — raw URL handling."
+    severity: WARNING
+    languages: [python]
+
+  - id: import-requests
+    pattern: import requests
+    message: "'requests' imported — external HTTP calls."
+    severity: WARNING
+    languages: [python]
+
+  - id: import-telnetlib
+    pattern: import telnetlib
+    message: "'telnetlib' imported — insecure Telnet protocol."
+    severity: ERROR
+    languages: [python]
+
+  - id: import-ftplib
+    pattern: import ftplib
+    message: "'ftplib' imported — insecure FTP protocol."
+    severity: ERROR
+    languages: [python]
+
+  - id: import-pickle
+    pattern: import pickle
+    message: "'pickle' imported — often used for insecure deserialization."
+    severity: WARNING
+    languages: [python]
+
+  - id: import-yaml
+    pattern: import yaml
+    message: "'yaml' imported — yaml.load() may be unsafe."
+    severity: WARNING
+    languages: [python]
+
+
+  # --- SYSTEM & SHELL EXECUTION ---
+  - id: os-system
+    pattern: os.system(...)
+    message: "os.system(): possible shell injection / arbitrary command execution."
+    severity: ERROR
+    languages: [python]
+
+  - id: os-popen
+    pattern: os.popen(...)
+    message: "os.popen(): insecure shell pipe, deprecated."
+    severity: ERROR
+    languages: [python]
+
+  - id: os-exec
+    pattern: os.exec*(...)
+    message: "os.exec*(): replaces current process—dangerous."
+    severity: ERROR
+    languages: [python]
+
+  - id: os-spawn
+    pattern: os.spawn*(...)
+    message: "os.spawn*(): runs external commands—validate inputs."
+    severity: WARNING
+    languages: [python]
+
+  - id: subprocess-call
+    pattern-either:
+      - pattern: subprocess.call(...)
+      - pattern: subprocess.check_call(...)
+      - pattern: subprocess.check_output(...)
+      - pattern: subprocess.run(...)
+    message: "subprocess.*(): external process execution—risk of RCE if inputs untrusted."
+    severity: ERROR
+    languages: [python]
+
+  - id: subprocess-shell-true
+    pattern: subprocess.run(..., shell=True)
+    message: "subprocess.run(shell=True): very high risk of shell injection."
+    severity: CRITICAL
+    languages: [python]
+
+  - id: pty-spawn
+    pattern: pty.spawn(...)
+    message: "pty.spawn(): can be used for reverse shells."
+    severity: WARNING
+    languages: [python]
+
+
+  # --- DYNAMIC CODE EXECUTION ---
+  - id: exec-eval-compile
+    pattern-either:
+      - pattern: eval(...)
+      - pattern: exec(...)
+      - pattern: compile(...)
+    message: "Dynamic code execution detected: eval/exec/compile."
+    severity: CRITICAL
+    languages: [python]
+
+  - id: eval-input
+    pattern: eval(input(...))
+    message: "eval(input()): untrusted input → arbitrary code execution."
+    severity: CRITICAL
+    languages: [python]
+
+
+  # --- INSECURE DESERIALIZATION ---
+  - id: insecure-pickle
+    pattern-either:
+      - pattern: pickle.loads(...)
+      - pattern: pickle.load(...)
+    message: "pickle.load(s): insecure deserialization."
+    severity: CRITICAL
+    languages: [python]
+
+  - id: insecure-marshal
+    pattern-either:
+      - pattern: marshal.loads(...)
+      - pattern: marshal.load(...)
+    message: "marshal.load(s): insecure deserialization."
+    severity: CRITICAL
+    languages: [python]
+
+  - id: insecure-yaml-load
+    pattern: yaml.load(...)
+    message: "yaml.load(): unsafe loader by default."
+    severity: ERROR
+    languages: [python]
+
+
+  # --- UNSAFE INPUT HANDLING ---
+  - id: raw-input
+    pattern: input(...)
+    message: "input(): unvalidated input can lead to code injection."
+    severity: WARNING
+    languages: [python]
+
+
+  # --- INSECURE CRYPTOGRAPHY & RNG ---
+  - id: insecure-hash
+    pattern-either:
+      - pattern: hashlib.md5(...)
+      - pattern: hashlib.sha1(...)
+    message: "Insecure hash (MD5/SHA1)—use SHA-256 or better."
+    severity: WARNING
+    languages: [python]
+
+  - id: weak-random
+    pattern-either:
+      - pattern: random.random(...)
+      - pattern: random.choice(...)
+      - pattern: random.randrange(...)
+    message: "Weak RNG—use the 'secrets' module for security-sensitive operations."
+    severity: WARNING
+    languages: [python]
+
+
+  # ---------- FILE & ENVIRONMENT OPERATIONS ----------
+  - id: getenv-env
+    pattern: os.environ.get(...)
+    message: "os.environ.get(): reading env vars—check for leaked secrets."
+    severity: INFO
+    languages: [python]
+
+  - id: insecure-tempfile
+    pattern: tempfile.mktemp(...)
+    message: "tempfile.mktemp(): insecure temp file creation—use mkstemp()."
+    severity: WARNING
+    languages: [python]
+
+  # - id: dangerous-open
+  #   pattern-either:
+  #     - pattern: open(..., 'w')
+  #     - pattern: open(..., 'a')
+  #     - pattern: open(..., 'x')
+  #   message: "open(..., write-mode): ensure path validation to prevent file overwrite."
+  #   severity: WARNING
+  #   languages: [python]
+
+  - id: dangerous-remove
+    pattern: os.remove(...)
+    message: "os.remove(): verify path to avoid arbitrary file deletion."
+    severity: WARNING
+    languages: [python]
+
+  - id: dangerous-rmdir
+    pattern: os.rmdir(...)
+    message: "os.rmdir(): verify path to avoid removal of unintended directories."
+    severity: WARNING
+    languages: [python]
+
+  - id: os-walk
+    pattern: os.walk(...)
+    message: "os.walk(): recursive filesystem traversal."
+    severity: INFO
+    languages: [python]
+
+
+ 

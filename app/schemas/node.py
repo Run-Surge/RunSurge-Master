@@ -1,22 +1,67 @@
 from pydantic import BaseModel, ConfigDict
 from datetime import datetime
 from typing import Optional
+from app.utils.constants import DEFAULT_PORT
+from app.db.models.scheme import EarningStatus, TaskStatus
+from typing import List
 
 class NodeBase(BaseModel):
     node_name: str
     ram: int
-    cpu_cores: int
-    ip_address: Optional[str] = None
-    port: Optional[int] = None
+    ip_address: str
+    port: Optional[int] = DEFAULT_PORT
 
-class NodeRead(NodeBase):
+
+
+class NodeRead(BaseModel):
     node_id: int
     created_at: datetime
     user_id: int
-    model_config = ConfigDict(from_attributes=True)
+    is_alive: bool
+    total_node_earnings: float
+    num_of_completed_tasks: int
+
+
+class DashboardRead(BaseModel):
+    total_earnings: float
+    paid_earnings: float
+    pending_earnings: float
+    number_of_nodes: int
+    nodes: List[NodeRead]
+
 
 class NodeCreate(NodeBase):
-    pass
+    machine_fingerprint: str
+    is_alive: bool
 
 class NodeUpdate(NodeBase):
     pass
+
+
+class NodeRegisterGRPC(BaseModel):
+    user_id: int
+    machine_fingerprint: str
+    memory_bytes: int
+    ip_address: str
+    port: int
+
+class NodeUpdateGRPC(BaseModel):
+    node_id: int
+    is_alive: bool
+
+class TaskNodeDetailRead(BaseModel):
+    task_id: int
+    started_at: Optional[datetime] = None
+    completed_at: datetime
+    total_active_time: float
+    avg_memory_bytes: int
+    status: TaskStatus
+    earning_amount: float
+    earning_status: EarningStatus
+
+class NodeDetailRead(BaseModel):
+    node_id: int
+    is_alive: bool
+    total_node_earnings: float
+    num_of_completed_tasks: int
+    tasks: List[TaskNodeDetailRead]

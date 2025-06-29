@@ -1,0 +1,67 @@
+import os
+import zipfile
+
+ZIP_PATHES = {{zip_pathes}}
+
+
+output_zip = zipfile.ZipFile('{{output_zip_path}}', 'w')
+final_file = None
+job_counter = 0
+
+###########Code Before For Loop###########
+{{code_before_for_loop}}
+###########Code Before For Loop###########
+
+
+for zip_path in ZIP_PATHES:
+    job_counter = job_counter + 1
+    with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+        for file_path in zip_ref.namelist():
+
+            if file_path.endswith('/'):  # Check if path ends with slash indicating directory
+                continue
+            
+            file_name = os.path.basename(file_path)
+            folder_name = os.path.dirname(file_path)
+            file_name_without_ext, file_extension = os.path.splitext(file_name)
+
+            file_bytes = zip_ref.read(file_path)
+            iteration_file = None
+
+            ###########Users Code###########
+{{code}}
+            ###########Users Code###########
+        
+            if iteration_file is None:
+                continue
+            
+            if type(iteration_file) != dict:
+                raise Exception("iteration_file is None or type(iteration_file) != dict for file: " + file_path)
+
+            if iteration_file.get('file_path') is None or iteration_file.get('file_bytes') is None:
+                raise Exception("iteration_file.get('file_path') is None or iteration_file.get('file_bytes') is None for file: " + file_path)
+
+            if type(iteration_file['file_path']) != str:
+                raise Exception("type(iteration_file['file_path']) != str for file: " + file_path)
+            
+            output_zip.writestr(iteration_file['file_path'], iteration_file['file_bytes'])
+
+
+
+###########Code After For Loop###########
+{{code_after_for_loop}}
+###########Code After For Loop###########
+
+if final_file is None:
+    exit(0)
+
+if type(final_file) != dict:
+    raise Exception("final_file is None or type(final_file) != dict")
+
+if final_file.get('file_path') is None or final_file.get('file_bytes') is None:
+    raise Exception("final_file.get('file_path') is None or final_file.get('file_bytes') is None")
+
+if type(final_file['file_path']) != str:
+    raise Exception("type(final_file['file_path']) != str")
+
+output_zip.writestr(final_file['file_path'], final_file['file_bytes'])

@@ -1,0 +1,50 @@
+syntax = "proto3";
+package project_common;
+
+// Data type enumeration
+enum DataType {
+  DATA_TYPE_UNSPECIFIED = 0;  // Default, should not be used
+  DATA_TYPE_FILE = 1;         // File data
+  DATA_TYPE_PYTHON_PICKLE = 2; // Python pickled object
+}
+
+message StatusResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message DataIdentifier {
+  int64 data_id = 1;
+}
+
+message FileIdentifier {
+  int64 id = 1;
+}
+
+// Metadata about data before streaming
+message DataMetadata {
+  int64 data_id = 1;
+  string data_name = 2;
+  int64 total_size_bytes = 3;     // Total size of the data to be streamed
+  string ip_address = 4;
+  int32 port = 5;
+  string hash = 6;
+  bool is_on_master = 7;
+  int64 task_id = 8;
+  bool is_zipped = 9;
+}
+// Chunk of data for streaming
+message DataChunk {
+  bytes chunk_data = 1;           // Raw data chunk
+  bool is_last_chunk = 2;         // True if this is the final chunk
+}
+
+
+message DataInfo {
+  int64 data_id = 1;
+  int64 task_id = 2;
+  string file_name = 3;
+  string size = 4; // in bytes
+  string hash = 5; // sha256 hash of the file
+}
+
