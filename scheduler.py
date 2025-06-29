@@ -536,75 +536,52 @@ def is_infeasible_due_to_nested_loops(py_source_code, arg_names):
                         return True
     return False
 
-# The only function you need to change or replace in your file.
-def reconstruct_source_with_indentation(lines_of_code):
-    """
-    Reconstructs a Python source string with plausible indentation.
-    Handles multi-line strings correctly and maintains internal block indentation.
-    """
-    reconstructed_code = []
-    indent_level = 0
-    DEDENT_KEYWORDS = ("elif", "else:", "except", "finally")
-
-    # First, flatten the keys into lines while preserving block indentation
-    actual_lines = []
-    for key in lines_of_code:
-        # Split into lines and preserve internal indentation
-        block_lines = key.split("\n")
-        actual_lines.append(block_lines)
-
-    for block in actual_lines:
-        for i, line in enumerate(block):
-            stripped_line = line.lstrip()
-            if not stripped_line:
-                continue  # Skip empty lines
-
-            # Apply dedent before this line if needed
-            if stripped_line.startswith(DEDENT_KEYWORDS):
-                indent_level = max(0, indent_level - 1)
-
-            # Compute the internal indent (relative to first line in block)
-            internal_indent = len(line) - len(stripped_line)
-            final_indent = ("    " * indent_level) + (" " * internal_indent)
-            reconstructed_code.append(final_indent + stripped_line)
-
-        # If the last line in the block ends with ":", indent the next block
-        if block[-1].strip().endswith(":"):
-            indent_level += 1
-
-    return "\n".join(reconstructed_code)
-
-
 # This function now works correctly because it uses the fixed helper.
 def build_function_definitions(func_footprints_data):
     """
-    Parses the function footprints to build a dictionary of unique,
-    reconstructed Python function source code.
+    Parses footprints and builds reconstructed source code using the
+    user's file-writing logic, converted to build a string.
     """
     all_functions_code = {}
     processed_function_names = set()
-
+    
     for key, footprint in func_footprints_data.items():
-        def_line = list(footprint.keys())[0]
-        match = re.match(r"def\s+(\w+)\s*\(", def_line)
-        if not match:
-            continue
+        match = re.search(r':(\w+)\(', key)
+        if not match: continue
         
-        func_name = match.groups()[0]
-        if func_name in processed_function_names:
-            continue
-            
-        print(f"Reconstructing function: {func_name}")
-        # Get all the code lines from the footprint, excluding the "aggregation" key.
-        lines_from_footprints = [line for line in footprint.keys() if line != "aggregation"]
+        func_name = match.group(1)
+        if func_name in processed_function_names: continue
+
+        # This list will hold the lines of the reconstructed function
+        reconstructed_lines = []
         
-        # Use the new, corrected reconstruction function.
-        reconstructed_code = reconstruct_source_with_indentation(lines_from_footprints)
+        # This is your file-writing logic, converted to build a list of strings
+        # --------------------------------------------------------------------
+        values = [x.replace('\\n', '\n') for x in footprint.keys()]
+        is_not_first = False
+        for value in values:
+            for split in value.split('\n'):
+                if split != "aggregation":
+                    line_to_add = ""
+                    if is_not_first:
+                        # This indents every line after the first with 3 spaces
+                        line_to_add = '   ' + split 
+                    else:
+                        line_to_add = split
+                    
+                    reconstructed_lines.append(line_to_add)
+                    is_not_first = True
+        # --------------------------------------------------------------------
+
+        # Join the collected lines into a single string
+        reconstructed_code = "\n".join(reconstructed_lines)
         
+        # Store the final string
         all_functions_code[func_name] = reconstructed_code
         processed_function_names.add(func_name)
         
     return all_functions_code
+
 
 def sanitize_statement_for_filename(statement: str) -> str:
     """Converts a Python statement into a safe string for a filename."""
@@ -865,7 +842,6 @@ async def generate_sequential_assignment(
     data_service = get_data_service(session)
     for stmt in info["statements"]:
         output_var = get_lhs_var(stmt)
-        task_python_code.append(f"    print(f'EXECUTING: {stmt}')")
         task_python_code.append(f"    {stmt}")
         if output_var in var_consumers:
             temp_output_filename = f"temp_{output_var}_{os.urandom(4).hex()}.csv"
@@ -1404,7 +1380,7 @@ async def main():
             except Exception as e:
                 print(traceback.format_exc())
                 print(f"Error: {e}")
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(5)
 
 if __name__ == "__main__":
     asyncio.run(main())
