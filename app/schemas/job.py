@@ -39,7 +39,7 @@ class ComplexJobRead(BaseModel):
 class ComplexJobDetailRead(ComplexJobRead):
     input_file_name: str
     payment_amount: Optional[float] = None
-
+    
 
 class TaskPaymentRead(BaseModel):
     task_id: int

@@ -2,7 +2,7 @@ from fastapi import FastAPI, Request
 from contextlib import asynccontextmanager
 from fastapi.middleware.cors import CORSMiddleware
 from app.db.session import init_db
-from app.api import user, node, job, auth, group
+from app.api import user, node, job, auth, group, statistics
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -29,8 +29,10 @@ app.add_middleware(
         "http://10.10.10.249:3000",
         "http://10.10.10.218:3000",
         "http://10.10.10.219",
+        "http://10.10.10.246:3000",
         "http://localhost:3000",
         "http://localhost"
+        
     ],  # Allow access from specified origins
     allow_credentials=True,
     allow_methods=["*"],
@@ -42,6 +44,7 @@ app.include_router(node.router, prefix="/api/node", tags=["Nodes"])
 app.include_router(job.router, prefix="/api/job", tags=["Jobs"])
 app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(group.router, prefix="/api/group", tags=["Groups"])
+app.include_router(statistics.router, prefix="/api/statistics", tags=["statistics"])
 
 
 @app.get("/", tags=["Root"])

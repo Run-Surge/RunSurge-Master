@@ -18,6 +18,9 @@ from fastapi.responses import FileResponse
 from app.services.task import get_task_service
 from app.services.earnings import get_earnings_service
 import traceback
+from datetime import datetime
+from app.utils.vulnerability_scanner import run_semgrep
+
 router = APIRouter()
 
 @router.post("/", response_model=JobRead)
@@ -29,6 +32,7 @@ async def create_job(
     current_user = Depends(get_current_user_from_cookie)
 ):
     job_service = get_job_service(session)
+    
     job = await job_service.create_job_with_script(
         user_id=current_user["user_id"],
         file=file,
@@ -107,7 +111,7 @@ async def pay_job(
             raise HTTPException(status_code=401, detail="Unauthorized")
         job_service = get_job_service(session)
         job = await job_service.get_job(job_id)
-        if job.user_id != current_user["user_id"]:
+        if job.user_id != current_user["user_id"]:  
             raise HTTPException(status_code=403, detail="Forbidden")
         payment = await job_service.get_payment(job_id)
         if payment.status == PaymentStatus.completed:
@@ -118,6 +122,7 @@ async def pay_job(
         for task in tasks:
             task_earning = task.earning
             task_earning.status = EarningStatus.paid
+            task_earning.earning_date = datetime.now()  
         await job_service.pay_job(job_id)
         return {
             "message": "Payment completed successfully",
@@ -157,7 +162,6 @@ async def upload_data(
         append_chunk_to_file(input_file=file, file_path=file_path,file_name=str(data.input_data_id))
         if(chunk_index == total_chunks - 1):
             job= await job_service.get_job(data.job_id)
-            print("Here")
             Parallelizer(job.script_path,job.job_id,data.input_data_id)
             await job_service.update_job_status(job.job_id,JobStatus.pending_schedule)    
             return {
