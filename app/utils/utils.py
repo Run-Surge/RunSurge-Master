@@ -6,6 +6,11 @@ from fastapi import HTTPException
 from app.utils.constants import FILE_SIZE_LIMIT, DATA_CHUNK_SIZE_LIMIT, ZIP_FILE_CHUNK_SIZE_LIMIT,GROUPS_DIRECTORY_PATH,JOBS_DIRECTORY_PATH
 from app.utils.constants import GROUPS_DIRECTORY_PATH, JOBS_DIRECTORY_PATH
 import shutil
+import re
+import jinja2
+
+AGGREGATION_REGEX = r'####Code Before For Loop####\s+(.*?)\s+##########Loop Code##########\s+(.*?)\s+##########Code After For Loop##########\s+(.*?)$'
+   
 
 def Create_directory(path: str):
     if not os.path.exists(path):
@@ -14,6 +19,11 @@ def Create_directory(path: str):
 def save_file(file: UploadFile, path: str):
     with open(path, "wb") as f:
         f.write(file.file.read())
+
+def save_file_from_str(file_content: str, path: str):
+    with open(path, "w") as f:
+        f.write(file_content)
+
 def append_chunk_to_file(input_file: UploadFile, file_path: str, file_name: str):
     with open(os.path.join(file_path, f"{file_name}.csv"), "ab") as f:
         f.write(input_file.file.read())
@@ -30,6 +40,33 @@ def validate_file(file: UploadFile):
         raise HTTPException(status_code=400, detail="File is empty")
     if file.size > FILE_SIZE_LIMIT:
         raise HTTPException(status_code=400, detail="File size exceeds 10MB limit") 
+    
+def validate_aggregator_file(file: UploadFile):
+    match = re.match(AGGREGATION_REGEX, file.file.read().decode('utf-8'), re.DOTALL)
+    if not match:
+        raise HTTPException(status_code=400, detail="Invalid aggregator file")
+    
+    return match.groups()
+    
+def create_aggregator_file(group_id: int,before_code: str, loop_code: str, after_code: str, zip_pathes: list[str]) -> str:
+    template = jinja2.Template(open('app/templates/aggregation.py.j2', 'r').read())
+    
+    # Clean up the sections
+    before_code = before_code.strip()
+    loop_code = loop_code.strip()
+    after_code = after_code.strip()
+    
+    # Format the loop code with proper indentation for the template
+    formatted_loop_code = '\n'.join('            ' + line for line in loop_code.splitlines())
+    
+    return template.render(
+        code_before_for_loop=before_code,
+        code_after_for_loop=after_code, 
+        zip_pathes=zip_pathes, 
+        code=formatted_loop_code,
+        output_zip_path=f'{GROUPS_DIRECTORY_PATH}/{group_id}/group_output.zip'
+    )
+
     
 def validate_data_chunk(file: UploadFile):
     if not file.filename.endswith('.csv'):

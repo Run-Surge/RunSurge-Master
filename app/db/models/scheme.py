@@ -60,6 +60,7 @@ class JobType(str, Enum):
 class GroupStatus(str, Enum):
     submitted = 'submitted'
     running = 'running'
+    pending_aggregation = 'pending_aggregation'
     completed = 'completed'
     failed = 'failed'
 

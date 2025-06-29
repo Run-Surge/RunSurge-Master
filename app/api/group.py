@@ -14,6 +14,7 @@ from app.db.models.scheme import JobStatus, GroupStatus
 import os
 from app.utils.constants import GROUPS_DIRECTORY_PATH
 from fastapi.responses import FileResponse
+from app.utils.utils import create_aggregator_file, save_file_from_str
 
 router = APIRouter()
 
@@ -30,7 +31,7 @@ async def create_group(
         raise HTTPException(status_code=401, detail="Unauthorized")
     try:
         group_service = get_group_service(session)
-        group, python_path = await group_service.create_group(
+        group, python_path, aggregator_path, before_code, loop_code, after_code = await group_service.create_group(
             group_name=group_name,
             python_file=python_file,
             num_of_jobs=num_of_jobs,
@@ -50,7 +51,12 @@ async def create_group(
             )
         # Refresh group to include the newly created jobs
         group = await group_service.get_group_by_id(group_id)
+        output_zips = [f'{GROUPS_DIRECTORY_PATH}/{group_id}/output_{job.job_id}.zip' for job in group.jobs]
+        aggregator_file = create_aggregator_file(group.group_id, before_code, loop_code, after_code, output_zips)
+        save_file_from_str(aggregator_file, aggregator_path)
         return group
+    except HTTPException as e:
+        raise e
     except Exception as e:
         print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))

@@ -2,33 +2,36 @@ import uuid
 from app.db.repositories.group import GroupRepository
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import UploadFile, HTTPException
-from app.utils.utils import validate_file, save_file, Create_directory
+from app.utils.utils import validate_file, save_file, Create_directory, validate_aggregator_file
 from app.utils.constants import GROUPS_DIRECTORY_PATH
 from app.db.models.scheme import JobStatus, GroupStatus
 import logging
 import os
 import zipfile
 import traceback
+from app.core.logging import setup_logging
 
 class GroupService:
     def __init__(self, group_repo: GroupRepository):
         self.group_repo = group_repo
-        self.logger = logging.getLogger(__name__)
+        self.logger = setup_logging(__name__)
 
     async def create_group(self, group_name: str, python_file: UploadFile, num_of_jobs: int, user_id: int, aggregator_file: UploadFile):
         try:
             validate_file(python_file)
             validate_file(aggregator_file)
+            before_code, loop_code, after_code = validate_aggregator_file(aggregator_file)
             python_file_name = python_file.filename.split(".")[0]
             aggregator_file_name = aggregator_file.filename.split(".")[0]
-            random_name = str(uuid.uuid4())
+            random_name = f"{str(uuid.uuid4())}.py"
             group = await self.group_repo.create_group(group_name, python_file_name, aggregator_file_name,random_name, num_of_jobs, user_id)
             Create_directory(f"{GROUPS_DIRECTORY_PATH}/{group.group_id}")
             python_path = f"{GROUPS_DIRECTORY_PATH}/{group.group_id}/{group.group_id}.py"
             save_file(python_file, python_path)
-            aggregator_path = f"{GROUPS_DIRECTORY_PATH}/{group.group_id}/{random_name}.py"
-            save_file(aggregator_file, aggregator_path) 
-            return group, python_path
+            aggregator_path = f"{GROUPS_DIRECTORY_PATH}/{group.group_id}/{random_name}"
+            return group, python_path, aggregator_path, before_code, loop_code, after_code
+        except HTTPException as e:
+            raise e
         except Exception as e:
             print(e)
             raise HTTPException(status_code=500, detail=str(e))
@@ -54,23 +57,8 @@ class GroupService:
                 return False
             
             self.logger.info(f"Group {group_id} is all jobs completed, will start aggregating")
-            group_dir = f"{GROUPS_DIRECTORY_PATH}/{group_id}"
-            output_zip = zipfile.ZipFile(f"{group_dir}/group_output.zip", 'w')
-
-            for job in group.jobs:
-                output_file_path = f"{group_dir}/output_{job.job_id}.zip"
-                if not os.path.exists(output_file_path):
-                    raise HTTPException(status_code=404, detail=f"Output file {output_file_path} not found, while aggregating group {group_id}")
-                
-                # Add the job's output zip file to the group output zip
-                output_zip.write(output_file_path, os.path.basename(output_file_path))
-                self.logger.info(f"Added {output_file_path} to group output zip")
-
-            output_zip.close()
-            self.logger.info(f"Group {group_id} output zip created")
-
-            await self.update_group_status(group_id, GroupStatus.completed)
-            self.logger.info(f"Group {group_id} status updated to completed")
+            await self.update_group_status(group_id, GroupStatus.pending_aggregation)
+            self.logger.info(f"Group {group_id} status updated to pending_aggregation")
             return True
         except Exception as e:
             print(traceback.format_exc())
