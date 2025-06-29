@@ -149,3 +149,14 @@ class MasterServicer(master_pb2_grpc.MasterServiceServicer):
         except Exception as e:
             self.logger.error(f"Error in NodeHeartbeat: {e}")
             return common_pb2.StatusResponse(success=False, message=str(e))
+        
+    async def TaskStart(self, request: master_pb2.TaskStartRequest, context: grpc.ServicerContext):
+        self.logger.info(f"TaskStart request: {request}")
+        try:
+            async with get_db_context() as session:
+                task_service = get_task_service(session)
+                await task_service.start_task(request)
+                return common_pb2.StatusResponse(success=True, message="Task started successfully")
+        except Exception as e:
+            self.logger.error(f"Error in TaskStart: {e}")
+            return common_pb2.StatusResponse(success=False, message=str(e))

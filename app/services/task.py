@@ -133,5 +133,15 @@ class TaskService:
     async def get_tasks_with_job_id(self, job_id: int) -> List[Task]:
         return await self.task_repo.get_tasks_with_job_id(job_id)
     
+    async def start_task(self, request: master_pb2.TaskStartRequest) -> bool:
+        task = await self.task_repo.get_by_id(request.task_id)
+        if not task:
+            self.logger.error(f"Task not found: {request.task_id}")
+            return False
+        task.status = TaskStatus.running
+        task.started_at = datetime.fromtimestamp(request.start_time)
+        await self.task_repo.update(task)
+        return True
+
 def get_task_service(session: AsyncSession) -> TaskService:
     return TaskService(TaskRepository(session), EarningsRepository(session))

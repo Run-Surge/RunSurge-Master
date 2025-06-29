@@ -10,6 +10,7 @@ service MasterService {
   rpc NodeUnregister(NodeUnregisterRequest) returns (project_common.StatusResponse);
   rpc StreamData(project_common.DataIdentifier) returns (stream project_common.DataChunk);
   rpc NodeHeartbeat(NodeHeartbeatRequest) returns (project_common.StatusResponse);
+  rpc TaskStart(TaskStartRequest) returns (project_common.StatusResponse);
   // rpc NodeHeartbeat(NodeHeartbeatRequest) returns (NodeHeartbeatResponse);
   // rpc JobFailed(JobFailedRequest) returns (JobFailedResponse);
 
@@ -51,3 +52,9 @@ message NodeHeartbeatRequest {
     int64 number_of_tasks = 2;
     int64 memory_usage_bytes = 3;
 }
+
+message TaskStartRequest {
+    int64 task_id = 1;
+    int64 start_time = 2;
+}
+

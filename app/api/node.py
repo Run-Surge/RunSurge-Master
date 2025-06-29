@@ -53,12 +53,7 @@ async def get_node(
             total_node_earnings = await node_service.get_total_earnings([node])
             num_of_completed_tasks = await node_service.get_num_of_completed_tasks([node])
             print("MANGA")
-            return NodeDetailRead(
-                node_id=node.node_id,
-                is_alive=node.is_alive,
-                total_node_earnings=total_node_earnings,
-                num_of_completed_tasks=num_of_completed_tasks,
-                tasks=[
+            tasks=[
                     TaskNodeDetailRead(
                         task_id=task.task_id,
                         started_at=task.started_at,
@@ -72,6 +67,15 @@ async def get_node(
                     for task in node.tasks
                     if task.status == TaskStatus.completed
                 ]
+            
+            tasks.sort(key=lambda x: x.task_id, reverse=True)
+
+            return NodeDetailRead(
+                node_id=node.node_id,
+                is_alive=node.is_alive,
+                total_node_earnings=total_node_earnings,
+                num_of_completed_tasks=num_of_completed_tasks,
+                tasks=tasks
             )
     except Exception as e:
         print(traceback.format_exc())

@@ -90,36 +90,21 @@ class GroupService:
             if not is_all_jobs_completed:
                 return False
             
-            
             self.logger.info(f"Group {group_id} is all jobs completed, will start aggregating")
-            await self.update_group_status(group_id, GroupStatus.pending_aggregation)
-            self.logger.info(f"Group {group_id} status updated to pending_aggregation")
-            group_dir = f"{GROUPS_DIRECTORY_PATH}/{group_id}"
-            output_zip = zipfile.ZipFile(f"{group_dir}/group_output.zip", 'w')
-
             total_cost = 0
 
             for job in group.jobs:
-                output_file_path = f"{group_dir}/output_{job.job_id}.zip"
-                if not os.path.exists(output_file_path):
-                    raise HTTPException(status_code=404, detail=f"Output file {output_file_path} not found, while aggregating group {group_id}")
                 job_tasks = await get_task_service(self.group_repo.session).get_tasks_with_job_id(job.job_id)
                 for task in job_tasks:
                     if task.status == TaskStatus.completed:
                         print("I am here", task.earning.amount)
                         total_cost += task.earning.amount
 
-                # Add the job's output zip file to the group output zip
-                output_zip.write(output_file_path, os.path.basename(output_file_path))
-                self.logger.info(f"Added {output_file_path} to group output zip")
-
-            output_zip.close()
-            self.logger.info(f"Group {group_id} output zip created")
 
             group.payment_amount = total_cost
             print(f"Group {group_id} payment amount: {group.payment_amount}")
-            await self.update_group_status(group_id, GroupStatus.completed)
-            self.logger.info(f"Group {group_id} status updated to completed")
+            await self.update_group_status(group_id, GroupStatus.pending_aggregation)
+            self.logger.info(f"Group {group_id} status updated to pending_aggregation")
             return True
         except Exception as e:
             print(traceback.format_exc())
