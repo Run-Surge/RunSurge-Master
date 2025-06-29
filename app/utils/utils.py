@@ -32,12 +32,14 @@ def  validate_file(file: UploadFile):
     if file.size > FILE_SIZE_LIMIT:
         raise HTTPException(status_code=400, detail="File size exceeds 10MB limit") 
     random_name = str(uuid.uuid4())
+    PATH = f"{TEMP_DIRECTORY_PATH}/{random_name}.py"
     os.makedirs(TEMP_DIRECTORY_PATH, exist_ok=True)
     save_file(file, f"{TEMP_DIRECTORY_PATH}/{random_name}.py")
     if(run_semgrep(f"{TEMP_DIRECTORY_PATH}/{random_name}.py", "app/utils/dangerous.yaml")):
         os.remove(f"{TEMP_DIRECTORY_PATH}/{random_name}.py")
         raise HTTPException(status_code=400, detail="Vulnerable script detected")
     os.remove(f"{TEMP_DIRECTORY_PATH}/{random_name}.py")
+    file.file.seek(0)
     
 def validate_data_chunk(file: UploadFile):
     if not file.filename.endswith('.csv'):
