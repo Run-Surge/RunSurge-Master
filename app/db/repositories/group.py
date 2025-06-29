@@ -22,6 +22,11 @@ class GroupRepository(BaseRepository[Group]):
         result = await self.session.execute(statement)
         return result.scalar_one_or_none()
     
+    async def get_group_jobs(self, group_id: int):
+        statement = select(Job).where(Job.group_id == group_id).options(selectinload(Job.payment))
+        result = await self.session.execute(statement)
+        return result.scalars().all()
+    
     async def get_group_with_jobs(self, group_id: int):
         statement = select(Group).options(joinedload(Group.jobs)).where(Group.group_id == group_id)
         result = await self.session.execute(statement)

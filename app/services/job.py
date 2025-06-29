@@ -18,6 +18,7 @@ import os
 from app.db.repositories.payment import PaymentRepository
 from app.core.logging import setup_logging
 from datetime import datetime
+from app.services.group import get_group_service
 
 class JobService:
     def __init__(self, job_repo: JobRepository, payment_repo: PaymentRepository):
@@ -184,6 +185,7 @@ class JobService:
         except Exception as e:
             print(traceback.format_exc())
             raise HTTPException(status_code=500, detail=str(e))
+        
 
 def get_job_service(session: AsyncSession) -> JobService:
     return JobService(JobRepository(session), PaymentRepository(session))

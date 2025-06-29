@@ -10,6 +10,11 @@ import os
 import zipfile
 import traceback
 from app.core.logging import setup_logging
+from app.services.task import get_task_service  
+from typing import List
+from app.db.models.scheme import Task
+from datetime import datetime
+from app.db.models.scheme import PaymentStatus, EarningStatus, TaskStatus
 
 class GroupService:
     def __init__(self, group_repo: GroupRepository):
@@ -46,6 +51,35 @@ class GroupService:
         group = await self.group_repo.get_group_by_id(group_id)
         group.status = status
         await self.group_repo.update(group)
+
+    async def get_group_tasks(self, group_id: int) -> List[Task]:
+        group = await self.group_repo.get_group_by_id(group_id)
+        tasks = []
+        for job in group.jobs:
+            tasks.extend(await get_task_service(self.group_repo.session).get_tasks_with_job_id(job.job_id))
+        return tasks
+    
+    async def pay_group(self, group_id: int) -> bool:
+        try:
+            jobs = await self.group_repo.get_group_jobs(group_id)
+            tasks = await self.get_group_tasks(group_id)
+            for task in tasks:
+                task_earning = task.earning
+                task_earning.status = EarningStatus.paid
+                task_earning.earning_date = datetime.now()
+            for job in jobs:
+                job.payment.status = PaymentStatus.completed
+                job.payment.payment_date = datetime.now()
+            
+            # Update group payment status
+            group = await self.group_repo.get_group_by_id(group_id)
+            group.payment_status = PaymentStatus.completed
+            group.payment_date = datetime.now()
+            await self.group_repo.update(group)
+            return True
+        except Exception as e:
+            print(traceback.format_exc())
+            self.logger.error(f"Error paying group {group_id}: {e}")        
     
     async def update_group_after_job_completion(self, group_id: int) -> bool:
         try:
@@ -56,6 +90,7 @@ class GroupService:
             if not is_all_jobs_completed:
                 return False
             
+            
             self.logger.info(f"Group {group_id} is all jobs completed, will start aggregating")
             await self.update_group_status(group_id, GroupStatus.pending_aggregation)
             self.logger.info(f"Group {group_id} status updated to pending_aggregation")
@@ -64,7 +99,6 @@ class GroupService:
             print(traceback.format_exc())
             self.logger.error(f"Error updating group {group_id} after job completion: {e}")
             raise HTTPException(status_code=500, detail=str(e))
-
 
 def get_group_service(session: AsyncSession) -> GroupService:
     return GroupService(GroupRepository(session))
