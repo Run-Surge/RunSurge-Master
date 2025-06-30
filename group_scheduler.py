@@ -62,18 +62,17 @@ async def single_task_job_scheduler(
     node_service = get_node_service(session)
     task_service = get_task_service(session)
     nodes = await node_service.get_all_nodes()
-    for node in nodes:
-        consumed_ram = await task_service.get_total_node_ram(node.node_id)
-        print(f"Node {node.node_id} has {node.ram} RAM, consumed: {consumed_ram}")
-        node.ram = node.ram - consumed_ram
 
+    nodes_data = [{"name": node.node_name, "memory": node.ram - await task_service.get_total_node_ram(node.node_id), "ip_address": node.ip_address, "port": node.port} for node in nodes]
+    node_map = {node.node_name: node.node_id for node in nodes}
+    print(nodes)
+    
     if not nodes:
         print(f"  -> FATAL ERROR: No worker nodes are available. Cannot schedule job {job_id}.")
         job_service = get_job_service(session)
         # await job_service.update_job_status(job_id, JobStatus.pending_schedule)
         return
 
-    nodes_data, node_map = convert_nodes_into_Json(nodes)
     node_address_map = {node["name"]: (node["ip_address"], node["port"]) for node in nodes_data}
     # print(f"  -> Available nodes: {nodes_data}")
 

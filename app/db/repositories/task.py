@@ -98,7 +98,7 @@ class TaskRepository(BaseRepository[Task]):
         return result.unique().scalar_one_or_none()
     
     async def get_running_tasks_by_node_id(self, node_id: int) -> List[Task]:
-        query = select(Task).where(Task.node_id == node_id, Task.status == TaskStatus.running)
+        query = select(Task).where(Task.node_id == node_id, Task.status == TaskStatus.running or  Task.status == TaskStatus.pending)
         result = await self.session.execute(query)
         return result.scalars().all()
     
