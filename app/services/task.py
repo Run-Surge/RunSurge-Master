@@ -129,6 +129,8 @@ class TaskService:
         for task in tasks:
             total_ram += task.required_ram
         return total_ram
+    
+    # async def get_tasks_sorted_by_created_at()
         
     async def get_tasks_with_job_id(self, job_id: int) -> List[Task]:
         return await self.task_repo.get_tasks_with_job_id(job_id)

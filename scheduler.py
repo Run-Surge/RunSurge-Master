@@ -536,6 +536,22 @@ def is_infeasible_due_to_nested_loops(py_source_code, arg_names):
                         return True
     return False
 
+def reconstruct_source_with_indentation(reconstructed_lines, footprint):
+        values = [x.replace('\\n', '\n') for x in footprint.keys()]
+        is_not_first = False
+        for value in values:
+            for split in value.split('\n'):
+                if split != "aggregation":
+                    line_to_add = ""
+                    if is_not_first:
+                        line_to_add = '   ' + split 
+                    else:
+                        line_to_add = split
+                    
+                    reconstructed_lines.append(line_to_add)
+                    is_not_first = True
+        return reconstructed_lines
+
 # This function now works correctly because it uses the fixed helper.
 def build_function_definitions(func_footprints_data):
     """
@@ -555,24 +571,7 @@ def build_function_definitions(func_footprints_data):
         # This list will hold the lines of the reconstructed function
         reconstructed_lines = []
         
-        # This is your file-writing logic, converted to build a list of strings
-        # --------------------------------------------------------------------
-        values = [x.replace('\\n', '\n') for x in footprint.keys()]
-        is_not_first = False
-        for value in values:
-            for split in value.split('\n'):
-                if split != "aggregation":
-                    line_to_add = ""
-                    if is_not_first:
-                        # This indents every line after the first with 3 spaces
-                        line_to_add = '   ' + split 
-                    else:
-                        line_to_add = split
-                    
-                    reconstructed_lines.append(line_to_add)
-                    is_not_first = True
-        # --------------------------------------------------------------------
-
+        reconstructed_lines = reconstruct_source_with_indentation(reconstructed_lines, footprint)
         # Join the collected lines into a single string
         reconstructed_code = "\n".join(reconstructed_lines)
         
@@ -581,7 +580,6 @@ def build_function_definitions(func_footprints_data):
         processed_function_names.add(func_name)
         
     return all_functions_code
-
 
 def sanitize_statement_for_filename(statement: str) -> str:
     """Converts a Python statement into a safe string for a filename."""
@@ -1191,11 +1189,13 @@ async def scheduler(job_id: int, session: AsyncSession, input_file: str):
         task_service = get_task_service(session)
         node_service = get_node_service(session)
         nodes = await node_service.get_all_nodes()
-        for node in nodes:
-            consumed_ram = await task_service.get_total_node_ram(node.node_id)
-            # print(f"Node {node.name} has {node.ram} RAM, consumed: {consumed_ram}")
-            node.ram = node.ram - consumed_ram
-        nodes_data, node_map = convert_nodes_into_Json(nodes)
+        # for node in nodes:
+        #     consumed_ram = await task_service.get_total_node_ram(node.node_id)
+        #     # print(f"Node {node.name} has {node.ram} RAM, consumed: {consumed_ram}")
+        #     node.ram = node.ram - consumed_ram
+        # nodes_data, node_map = convert_nodes_into_Json(nodes)
+        nodes_data = [{"name": node.node_name, "memory": node.ram - await task_service.get_total_node_ram(node.node_id) - 500000000, "ip_address": node.ip_address, "port": node.port} for node in nodes]
+        node_map = {node.node_name: node.node_id for node in nodes}
         job_dir = os.path.join(JOBS_DIRECTORY_PATH, str(job_id))
 
         print("Scheduler using nodes:", nodes_data)

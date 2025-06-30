@@ -19,6 +19,7 @@ from gRPCApp.utils import parse_grpc_peer_address
 from app.services.task import get_task_service
 from app.services.data import get_data_service
 from app.utils.utils import format_bytes
+import aiofiles
 
 
 class MasterServicer(master_pb2_grpc.MasterServiceServicer):
@@ -110,13 +111,13 @@ class MasterServicer(master_pb2_grpc.MasterServiceServicer):
             
             self.logger.debug(f"Streaming data {data_id}, total size: {format_bytes(total_size)}")
             start_time = time.time()
-            with open(data_path, 'rb') as f:
+            async with aiofiles.open(data_path, 'rb') as f:
 
                 while bytes_sent < total_size:
                     # Calculate chunk boundaries
                     start = int(bytes_sent)
                     end = int(min(start + chunk_size, total_size))
-                    chunk_data = f.read(chunk_size)
+                    chunk_data = await f.read(chunk_size)
                     
                     # Create chunk
                     is_last = (end >= total_size)

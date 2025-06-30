@@ -102,6 +102,11 @@ class TaskRepository(BaseRepository[Task]):
         result = await self.session.execute(query)
         return result.scalars().all()
     
+    # async def get_tasks_sorted_by_created_at(self) -> List[Task]:
+    #     query = select(Task).order_by(Task.created_at.desc())
+    #     result = await self.session.execute(query)
+    #     return result.scalars().all()
+    
     async def get_tasks_with_job_id(self, job_id: int) -> List[Task]:
         query = select(Task).where(Task.job_id == job_id).options(joinedload(Task.earning))
         result = await self.session.execute(query)

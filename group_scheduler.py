@@ -63,10 +63,10 @@ async def single_task_job_scheduler(
     task_service = get_task_service(session)
     nodes = await node_service.get_all_nodes()
 
-    nodes_data = [{"name": node.node_name, "memory": node.ram - await task_service.get_total_node_ram(node.node_id), "ip_address": node.ip_address, "port": node.port} for node in nodes]
+    nodes_data = [{"name": node.node_name, "memory": node.ram - await task_service.get_total_node_ram(node.node_id) - 500000000, "ip_address": node.ip_address, "port": node.port} for node in nodes]
     node_map = {node.node_name: node.node_id for node in nodes}
     print(nodes)
-    
+
     if not nodes:
         print(f"  -> FATAL ERROR: No worker nodes are available. Cannot schedule job {job_id}.")
         job_service = get_job_service(session)
